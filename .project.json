@@ -101,7 +101,7 @@
       "tldrLineHeight": 1.55,
       "tldrFontSize": 1.1500000000000001,
       "heroHighlightColor": "#f6eefc",
-      "headingTextColor": "#521782",
+      "headingTextColor": "#310e4e",
       "subsectionFontSize": 1.25
     }
   },
@@ -112,7 +112,19 @@
       "content": {
         "projectTitle": "Geometric Action Model for Visuomotor Control",
         "venue": "arXiv",
-        "venueYear": "2026"
+        "venueYear": "2026",
+        "titleLines": [
+          {
+            "text": "Geometric Action Model",
+            "size": 1,
+            "highlight": true
+          },
+          {
+            "text": " for Visuomotor Control",
+            "size": 1,
+            "highlight": false
+          }
+        ]
       },
       "id": "hero-section",
       "contentMaxWidth": 935,
@@ -254,8 +266,8 @@
             "valueFontSize": 15
           }
         ],
-        "chartHeight": 309,
-        "chartMaxWidth": 475,
+        "chartHeight": 353,
+        "chartMaxWidth": 447,
         "blockAlign": "center",
         "columns": 1,
         "media": [
@@ -272,7 +284,8 @@
           "GAM predicts future geometry and action tokens inside a GFM, making CAMERA robustness a direct consequence of the policy pathway rather than an auxiliary feature."
         ]
       },
-      "id": "intro-section"
+      "id": "intro-section",
+      "paddingBottom": 45
     },
     {
       "type": "tldr",
