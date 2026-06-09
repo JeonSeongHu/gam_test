@@ -3,7 +3,7 @@
     "title": "Geometric Action Model for Visuomotor Control",
     "template": "cameo",
     "theme": {
-      "primaryColor": "#521782",
+      "primaryColor": "#733aa1",
       "secondaryColor": "#5e2e84",
       "accentColor": "#d0a8f0",
       "backgroundColor": "#FFFFFF",
@@ -28,7 +28,7 @@
       "navSideAlign": "center",
       "navBackground": "transparent",
       "navTextColor": "#71717A",
-      "navAccentColor": "#521782",
+      "navAccentColor": "#733aa1",
       "heroStyle": "flat",
       "heroBackground": "#FAFAFA",
       "heroGradientFrom": "#e7d4f7",
@@ -36,7 +36,7 @@
       "heroTitleSize": 4.25,
       "heroSubtitleSize": 1.05,
       "headingStyle": "plain",
-      "headingDecoColor": "#521782",
+      "headingDecoColor": "#733aa1",
       "headingDecoWidth": 0,
       "headingDecoThickness": 2,
       "shadowStyle": "subtle",
@@ -48,8 +48,8 @@
       "contentBoxPadding": 0,
       "tldrStyle": "filled",
       "tldrBackground": "#E9ECEF",
-      "tldrBorderColor": "#521782",
-      "tldrLabelColor": "#521782",
+      "tldrBorderColor": "#733aa1",
+      "tldrLabelColor": "#733aa1",
       "calloutStyle": "full-border",
       "calloutBackground": "#F0FDFA",
       "calloutBorderColor": "#0F766E",
@@ -100,7 +100,7 @@
       "authorGap": 22,
       "tldrLineHeight": 1.55,
       "tldrFontSize": 1.1500000000000001,
-      "heroHighlightColor": "#f6eefc",
+      "heroHighlightColor": "#521782",
       "headingTextColor": "#310e4e",
       "subsectionFontSize": 1.25
     }
@@ -215,8 +215,8 @@
           {
             "chartType": "scatter",
             "xAxisScale": "log",
-            "xAxisLabel": "Inference latency (ms, log scale, lower is better)",
-            "yAxisLabel": "CAMERA success rate (%)",
+            "xAxisLabel": "Inference latency (ms)",
+            "yAxisLabel": "LIBERO-Plus Camera SR (%)",
             "showLegend": false,
             "legendPosition": "overlay-top",
             "legendStyle": "minimal",
@@ -260,14 +260,15 @@
                 ]
               }
             ],
-            "tickFontSize": 16,
+            "tickFontSize": 13,
             "axisLabelFontSize": 17,
             "legendFontSize": 15,
-            "valueFontSize": 15
+            "valueFontSize": 17,
+            "pointRadius": 8.5
           }
         ],
-        "chartHeight": 353,
-        "chartMaxWidth": 447,
+        "chartHeight": 328,
+        "chartMaxWidth": 531,
         "blockAlign": "center",
         "columns": 1,
         "media": [
@@ -282,17 +283,95 @@
           "VLAs use strong language and semantic priors, but their action decoding largely depends on 2D visual representations.",
           "WAMs add temporal prediction, but usually predict in image or video latent space rather than explicitly geometric space.",
           "GAM predicts future geometry and action tokens inside a GFM, making CAMERA robustness a direct consequence of the policy pathway rather than an auxiliary feature."
-        ]
+        ],
+        "chart": {
+          "chartType": "scatter",
+          "xAxisScale": "log",
+          "xAxisLabel": "Inference latency (ms)",
+          "yAxisLabel": "LIBERO-Plus Camera SR (%)",
+          "showLegend": false,
+          "legendPosition": "overlay-top",
+          "legendStyle": "minimal",
+          "legendMarker": "dot",
+          "highlightDataset": 0,
+          "datasets": [
+            {
+              "label": "GAM",
+              "xValues": [
+                6.9
+              ],
+              "values": [
+                83.1
+              ]
+            },
+            {
+              "label": "pi0.5",
+              "xValues": [
+                29.2
+              ],
+              "values": [
+                72
+              ]
+            },
+            {
+              "label": "Cosmos-Policy",
+              "xValues": [
+                382.4
+              ],
+              "values": [
+                73.4
+              ]
+            },
+            {
+              "label": "OpenVLA-OFT",
+              "xValues": [
+                77.8
+              ],
+              "values": [
+                56.4
+              ]
+            }
+          ],
+          "tickFontSize": 13,
+          "axisLabelFontSize": 17,
+          "legendFontSize": 15,
+          "valueFontSize": 17,
+          "pointRadius": 8.5
+        }
       },
       "id": "intro-section",
-      "paddingBottom": 45
+      "paddingBottom": 15,
+      "layoutGroupId": "layout-1b5b434e",
+      "layoutColumn": 0,
+      "layoutGroupAnchor": true,
+      "layoutSplit": 51,
+      "layoutGap": 28,
+      "contentMaxWidth": 514
+    },
+    {
+      "id": "6151db45",
+      "type": "image",
+      "visible": true,
+      "content": {
+        "media": [
+          {
+            "type": "image",
+            "src": ""
+          }
+        ]
+      },
+      "layoutGroupId": "layout-1b5b434e",
+      "layoutColumn": 1,
+      "layoutGroupAnchor": false,
+      "layoutSplit": 51,
+      "layoutGap": 28
     },
     {
       "type": "tldr",
       "visible": true,
       "title": "TL;DR",
       "content": {
-        "text": "**GAM** makes a pretrained Geometric Foundation Model the shared substrate for action decoding and future geometry prediction. The headline story is speed plus CAMERA robustness: **6.9 ms inference** and 83.1% success under LIBERO-Plus camera perturbations.",
+        "text": "\n**GAM** makes a pretrained Geometric Foundation Model the shared substrate for action decoding and future geometry prediction. The headline story is speed plus CAMERA robustness: **6.9 ms inference** and 83.1% success under LIBERO-Plus camera perturbations.",
         "blockHeight": 148,
         "blockAlign": "center",
         "blockWidth": 1088
@@ -300,7 +379,7 @@
       "id": "tldr-section",
       "contentMaxWidth": 1056,
       "paddingTop": 6,
-      "paddingBottom": 53
+      "paddingBottom": 39
     },
     {
       "type": "abstract",
@@ -309,7 +388,8 @@
       "content": {
         "text": "Generalist robot policies must follow user instructions while reasoning about how objects, cameras, and robot actions interact in the 3D physical world. Recent vision-language-action models and video world-action models inherit strong semantic or temporal priors from large-scale foundation models, but they still operate primarily on 2D image frames or 2D-derived latent spaces, leaving the geometry required for contact-rich manipulation implicit.\n\nWe propose Geometric Action Model (GAM), a language-conditioned manipulation policy that directly repurposes a pretrained Geometric Foundation Model (GFM) as a shared substrate for perception, temporal prediction, and action decoding. GAM splits the GFM at an intermediate layer, where the shallow layers serve as an observation encoder, while a causal future predictor is inserted at the split layer to forecast future latent tokens conditioned on language, proprioception, and action history. The predicted future tokens are then routed through the remaining GFM blocks during feature propagation and decoding, allowing a single backbone to produce both future geometry and actions.\n\nThis design equips the GFM with language-conditioned temporal world modeling using only minimal architectural modification, while preserving its rich geometric priors. On a broad suite of simulation and real-robot manipulation benchmarks, GAM is more accurate, more robust, faster, and lighter than current foundation-model-scale baselines."
       },
-      "id": "abstract-section"
+      "id": "abstract-section",
+      "paddingTop": 12
     },
     {
       "type": "text",
