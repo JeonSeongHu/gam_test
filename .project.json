@@ -11,7 +11,7 @@
       "textColor": "#310e4e",
       "textSecondaryColor": "#71717A",
       "borderColor": "#807887",
-      "fontFamily": "'Pretendard Variable', 'Pretendard', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
+      "fontFamily": "'Google Sans Flex', 'Google Sans Flex Variable', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
       "headingFontFamily": "'Google Sans Flex', 'Google Sans Flex Variable', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
       "monoFontFamily": "monospace",
       "baseFontSize": 17,
@@ -98,8 +98,9 @@
       "authorLineHeight": 1,
       "authorRowGap": 10,
       "authorGap": 22,
-      "tldrLineHeight": 1.35,
-      "tldrFontSize": 1.1500000000000001
+      "tldrLineHeight": 1.55,
+      "tldrFontSize": 1.1500000000000001,
+      "heroHighlightColor": "#f6eefc"
     }
   },
   "sections": [
