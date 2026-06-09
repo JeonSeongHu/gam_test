@@ -107,7 +107,7 @@
       },
       "id": "a9c61bf3",
       "contentMaxWidth": 935,
-      "paddingBottom": 19
+      "paddingBottom": 0
     },
     {
       "type": "authors",
@@ -178,7 +178,8 @@
           }
         ]
       },
-      "id": "a4fbc950"
+      "id": "a4fbc950",
+      "paddingBottom": 16
     },
     {
       "type": "tldr",
@@ -194,8 +195,8 @@
     {
       "type": "chart",
       "visible": true,
-      "sectionLabel": "SPEED AND CAMERA ROBUSTNESS",
-      "title": "Log-Scale Speed vs. CAMERA Robustness",
+      "sectionLabel": "",
+      "title": "",
       "content": {
         "charts": [
           {
@@ -205,7 +206,7 @@
             "yAxisLabel": "CAMERA success rate (%)",
             "showLegend": true,
             "legendPosition": "top",
-            "legendStyle": "pill",
+            "legendStyle": "minimal",
             "legendMarker": "dot",
             "highlightDataset": 0,
             "datasets": [
@@ -245,11 +246,74 @@
                   56.4
                 ]
               }
-            ]
+            ],
+            "tickFontSize": 14,
+            "axisLabelFontSize": 15,
+            "legendFontSize": 13,
+            "valueFontSize": 13,
+            "legendCustomX": 9,
+            "legendCustomY": 3
           }
         ],
-        "chartHeight": 294,
-        "chartMaxWidth": 594
+        "chartHeight": 341,
+        "chartMaxWidth": 530,
+        "blockAlign": "center",
+        "columns": 1,
+        "chart": {
+          "chartType": "scatter",
+          "xAxisScale": "log",
+          "xAxisLabel": "Inference latency (ms, log scale, lower is better)",
+          "yAxisLabel": "CAMERA success rate (%)",
+          "showLegend": true,
+          "legendPosition": "top",
+          "legendStyle": "minimal",
+          "legendMarker": "dot",
+          "highlightDataset": 0,
+          "datasets": [
+            {
+              "label": "GAM",
+              "xValues": [
+                6.9
+              ],
+              "values": [
+                83.1
+              ]
+            },
+            {
+              "label": "pi0.5",
+              "xValues": [
+                29.2
+              ],
+              "values": [
+                72
+              ]
+            },
+            {
+              "label": "Cosmos-Policy",
+              "xValues": [
+                382.4
+              ],
+              "values": [
+                73.4
+              ]
+            },
+            {
+              "label": "OpenVLA-OFT",
+              "xValues": [
+                77.8
+              ],
+              "values": [
+                56.4
+              ]
+            }
+          ],
+          "tickFontSize": 14,
+          "axisLabelFontSize": 15,
+          "legendFontSize": 13,
+          "valueFontSize": 13,
+          "legendCustomX": 9,
+          "legendCustomY": 3
+        }
       },
       "id": "3ecc36fb",
       "layoutGroupId": "layout-1df113a0",
