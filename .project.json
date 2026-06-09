@@ -130,7 +130,10 @@
           },
           {
             "name": "Jaewoo Jung",
-            "affiliation": "KAIST AI, ETH Zürich"
+            "affiliations": [
+              "KAIST AI",
+              "ETH Zürich"
+            ]
           },
           {
             "name": "René Zurbrügg",
@@ -163,7 +166,8 @@
         ]
       },
       "id": "299c82e9",
-      "contentMaxWidth": 743
+      "contentMaxWidth": 743,
+      "paddingBottom": 13
     },
     {
       "type": "links",
@@ -183,7 +187,7 @@
         ]
       },
       "id": "a4fbc950",
-      "paddingBottom": 16
+      "paddingBottom": 19
     },
     {
       "type": "chart",
@@ -248,9 +252,9 @@
             "legendCustomY": 3
           }
         ],
-        "chartHeight": 361,
-        "chartMaxWidth": 491,
-        "blockAlign": "right",
+        "chartHeight": 295,
+        "chartMaxWidth": 505,
+        "blockAlign": "center",
         "columns": 1,
         "chart": {
           "chartType": "scatter",
@@ -309,12 +313,13 @@
         }
       },
       "id": "3ecc36fb",
-      "layoutGroupId": "layout-b065aedb",
+      "paddingTop": 34,
+      "paddingBottom": 22,
+      "layoutGroupId": "layout-5d8a45a9",
       "layoutColumn": 0,
       "layoutGroupAnchor": true,
       "layoutSplit": 50,
-      "layoutGap": 28,
-      "paddingTop": 34
+      "layoutGap": 28
     },
     {
       "type": "tldr",
@@ -327,7 +332,8 @@
         "blockWidth": 1340
       },
       "id": "130aafb6",
-      "contentMaxWidth": 1180
+      "contentMaxWidth": 1180,
+      "paddingTop": 6
     },
     {
       "type": "teaser",
@@ -344,8 +350,8 @@
         ]
       },
       "id": "1cfb748f",
-      "paddingBottom": 200,
-      "layoutGroupId": "layout-b065aedb",
+      "paddingBottom": 115,
+      "layoutGroupId": "layout-5d8a45a9",
       "layoutColumn": 1,
       "layoutGroupAnchor": false,
       "layoutSplit": 50,
