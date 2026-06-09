@@ -1,0 +1,707 @@
+{
+  "meta": {
+    "title": "Geometric Action Model for Visuomotor Control",
+    "template": "cameo",
+    "theme": {
+      "primaryColor": "#3F3F46",
+      "secondaryColor": "#71717A",
+      "accentColor": "#8EA8B8",
+      "backgroundColor": "#FFFFFF",
+      "surfaceColor": "#FAFAFA",
+      "textColor": "#27272A",
+      "textSecondaryColor": "#71717A",
+      "borderColor": "#E4E4E7",
+      "fontFamily": "'Wanted Sans Variable', 'Wanted Sans', -apple-system, BlinkMacSystemFont, sans-serif",
+      "headingFontFamily": "'Wanted Sans Variable', 'Wanted Sans', -apple-system, BlinkMacSystemFont, sans-serif",
+      "monoFontFamily": "monospace",
+      "baseFontSize": 15,
+      "headingFontSize": 2.5,
+      "bodyLineHeight": 1.625,
+      "borderRadius": 19,
+      "maxWidth": 1088,
+      "sectionSpacing": 48,
+      "contentPaddingX": 16,
+      "navStyle": "left-sidebar",
+      "navTopPreset": "default",
+      "navSidePreset": "dots",
+      "navSidePosition": "left",
+      "navSideAlign": "top",
+      "navBackground": "transparent",
+      "navTextColor": "#71717A",
+      "navAccentColor": "#3F3F46",
+      "heroStyle": "flat",
+      "heroBackground": "#FAFAFA",
+      "heroGradientFrom": "#F0F4F6",
+      "heroGradientTo": "#FFFFFF",
+      "heroTitleSize": 3.75,
+      "heroSubtitleSize": 1.25,
+      "headingStyle": "border-bottom",
+      "headingDecoColor": "#3F3F46",
+      "headingDecoWidth": 0,
+      "headingDecoThickness": 2,
+      "shadowStyle": "subtle",
+      "cardShadow": "0 1px 3px rgba(0,0,0,0.05)",
+      "cardHoverShadow": "0 4px 12px rgba(0,0,0,0.1)",
+      "animationStyle": "slide-up",
+      "contentBoxStyle": "plain",
+      "contentBoxRadius": 12,
+      "contentBoxPadding": 0,
+      "tldrStyle": "filled",
+      "tldrBackground": "#F0F4F6",
+      "tldrBorderColor": "#3F3F46",
+      "tldrLabelColor": "#3F3F46",
+      "calloutStyle": "full-border",
+      "calloutBackground": "#F0FDFA",
+      "calloutBorderColor": "#0F766E",
+      "calloutIconColor": "#0F766E",
+      "buttonStyle": "dark-pill",
+      "buttonBackground": "#FFFFFF",
+      "buttonTextColor": "#27272A",
+      "buttonBorderColor": "#E4E4E7",
+      "buttonRadius": 9999,
+      "buttonHoverEffect": "darken",
+      "authorLinkColor": "#3F3F46",
+      "tableHeaderBg": "#F0F4F6",
+      "tableHeaderColor": "#27272A",
+      "tableBorderColor": "#E4E4E7",
+      "tableHighlightBg": "#F0F4F6",
+      "tableHighlightColor": "#3F3F46",
+      "bibtexStyle": "card",
+      "bibtexBackground": "#FAFAFA",
+      "bibtexBorderColor": "#E4E4E7",
+      "mediaStyle": "plain",
+      "mediaBorderRadius": 12,
+      "mediaBoxPadding": 0,
+      "captionStyle": "italic",
+      "gridImageFit": "cover",
+      "chartLegendSize": 12,
+      "chartLegendStyle": "minimal",
+      "chartLegendMarker": "dot",
+      "chartTickSize": 11,
+      "teaserMaxWidth": 800,
+      "teaserBorderRadius": 10,
+      "compLabelStyle": "branded",
+      "compLabelABg": "rgba(15,118,110,0.85)",
+      "compLabelAColor": "#ffffff",
+      "compLabelBBg": "rgba(15,23,42,0.85)",
+      "compLabelBColor": "#ffffff",
+      "compSliderColor": "#0F766E",
+      "sectionDivider": "border-top",
+      "bulletStyle": "numbered",
+      "showSectionLabel": false,
+      "sectionLabelSize": 0.85,
+      "sectionLabelSpacing": 0.12,
+      "sectionLabelColor": "",
+      "sectionTitleSize": 1.6,
+      "labelTitleGap": 10
+    }
+  },
+  "sections": [
+    {
+      "type": "hero",
+      "visible": true,
+      "content": {
+        "projectTitle": "Geometric Action Model for Visuomotor Control",
+        "venue": "arXiv",
+        "venueYear": "2026"
+      },
+      "id": "a9c61bf3",
+      "contentMaxWidth": 935,
+      "paddingBottom": 19
+    },
+    {
+      "type": "authors",
+      "visible": true,
+      "content": {
+        "authors": [
+          {
+            "name": "Jisang Han",
+            "affiliation": "KAIST AI",
+            "equal": true
+          },
+          {
+            "name": "Seonghu Jeon",
+            "affiliation": "KAIST AI",
+            "equal": true
+          },
+          {
+            "name": "Jaewoo Jung",
+            "affiliation": "KAIST AI, ETH Zürich"
+          },
+          {
+            "name": "René Zurbrügg",
+            "affiliation": "ETH Zürich"
+          },
+          {
+            "name": "Honggyu An",
+            "affiliation": "KAIST AI"
+          },
+          {
+            "name": "Tifanny Portela",
+            "affiliation": "ETH Zürich"
+          },
+          {
+            "name": "Marco Hutter",
+            "affiliation": "ETH Zürich"
+          },
+          {
+            "name": "Marc Pollefeys",
+            "affiliation": "ETH Zürich"
+          },
+          {
+            "name": "Seungryong Kim",
+            "affiliation": "KAIST AI"
+          },
+          {
+            "name": "Sunghwan Hong",
+            "affiliation": "ETH Zürich"
+          }
+        ]
+      },
+      "id": "299c82e9",
+      "contentMaxWidth": 743
+    },
+    {
+      "type": "links",
+      "visible": true,
+      "content": {
+        "links": [
+          {
+            "label": "Paper",
+            "url": "#",
+            "icon": "paper"
+          },
+          {
+            "label": "Video",
+            "url": "#",
+            "icon": "video"
+          }
+        ]
+      },
+      "id": "a4fbc950"
+    },
+    {
+      "type": "tldr",
+      "visible": true,
+      "title": "TL;DR",
+      "content": {
+        "text": "**GAM** makes a pretrained Geometric Foundation Model the shared substrate for action decoding and future geometry prediction. The headline story is speed plus CAMERA robustness: **6.9 ms inference** and 83.1% success under LIBERO-Plus camera perturbations.~#212529:~",
+        "blockHeight": 131,
+        "blockAlign": "center"
+      },
+      "id": "130aafb6"
+    },
+    {
+      "type": "chart",
+      "visible": true,
+      "sectionLabel": "SPEED AND CAMERA ROBUSTNESS",
+      "title": "Log-Scale Speed vs. CAMERA Robustness",
+      "content": {
+        "charts": [
+          {
+            "chartType": "scatter",
+            "xAxisScale": "log",
+            "xAxisLabel": "Inference latency (ms, log scale, lower is better)",
+            "yAxisLabel": "CAMERA success rate (%)",
+            "showLegend": true,
+            "legendPosition": "top",
+            "legendStyle": "pill",
+            "legendMarker": "dot",
+            "highlightDataset": 0,
+            "datasets": [
+              {
+                "label": "GAM",
+                "xValues": [
+                  6.9
+                ],
+                "values": [
+                  83.1
+                ]
+              },
+              {
+                "label": "pi0.5",
+                "xValues": [
+                  29.2
+                ],
+                "values": [
+                  72
+                ]
+              },
+              {
+                "label": "Cosmos-Policy",
+                "xValues": [
+                  382.4
+                ],
+                "values": [
+                  73.4
+                ]
+              },
+              {
+                "label": "OpenVLA-OFT",
+                "xValues": [
+                  77.8
+                ],
+                "values": [
+                  56.4
+                ]
+              }
+            ]
+          }
+        ],
+        "chartHeight": 294,
+        "chartMaxWidth": 594
+      },
+      "id": "3ecc36fb",
+      "layoutGroupId": "layout-1df113a0",
+      "layoutColumn": 0,
+      "layoutGroupAnchor": true,
+      "layoutSplit": 50,
+      "layoutGap": 28
+    },
+    {
+      "type": "teaser",
+      "visible": true,
+      "title": "",
+      "content": {
+        "media": [
+          {
+            "type": "image",
+            "src": "",
+            "caption": "GAM is both faster and more robust under camera shift.",
+            "alt": "Hero visual combining the log-scale speed-performance scatter plot with representative CAMERA perturbation examples from simulation and real-robot settings."
+          }
+        ]
+      },
+      "id": "1cfb748f",
+      "layoutGroupId": "layout-1df113a0",
+      "layoutColumn": 1,
+      "layoutGroupAnchor": false,
+      "layoutSplit": 50,
+      "layoutGap": 28,
+      "paddingBottom": 200
+    },
+    {
+      "type": "image",
+      "visible": true,
+      "sectionLabel": "CORE COMPARISON",
+      "title": "VLA, WAM, and GAM Paradigms",
+      "content": {
+        "media": [
+          {
+            "type": "image",
+            "src": "",
+            "caption": "GAM moves world modeling from 2D video space into 3D geometric latent space.",
+            "alt": "Figure 1 from paper - side-by-side comparison of Video WAMs, geometry-aware VLAs, and GAM. Video WAMs predict future RGB latents and actions with video diffusion. Geometry-aware VLAs distill GFM features into a VLA. GAM inserts a causal future predictor inside a single GFM and decodes both future geometry and actions."
+          }
+        ]
+      },
+      "id": "091cfea7"
+    },
+    {
+      "type": "text",
+      "visible": true,
+      "sectionLabel": "POSITIONING",
+      "title": "From VLA and WAM to GAM",
+      "content": {
+        "bulletItems": [
+          "VLAs use strong language and semantic priors, but their action decoding largely depends on 2D visual representations.",
+          "WAMs add temporal prediction, but usually predict in image or video latent space rather than explicitly geometric space.",
+          "GAM predicts future geometry and action tokens inside a GFM, making CAMERA robustness a direct consequence of the policy pathway rather than an auxiliary feature."
+        ]
+      },
+      "id": "60aba31d"
+    },
+    {
+      "type": "abstract",
+      "visible": true,
+      "sectionLabel": "ABSTRACT",
+      "title": "",
+      "content": {
+        "text": "Generalist robot policies must follow user instructions while reasoning about how objects, cameras, and robot actions interact in the 3D physical world. Recent vision-language-action models and video world-action models inherit strong semantic or temporal priors from large-scale foundation models, but they still operate primarily on 2D image frames or 2D-derived latent spaces, leaving the geometry required for contact-rich manipulation implicit.\n\nWe propose Geometric Action Model (GAM), a language-conditioned manipulation policy that directly repurposes a pretrained Geometric Foundation Model (GFM) as a shared substrate for perception, temporal prediction, and action decoding. GAM splits the GFM at an intermediate layer, where the shallow layers serve as an observation encoder, while a causal future predictor is inserted at the split layer to forecast future latent tokens conditioned on language, proprioception, and action history. The predicted future tokens are then routed through the remaining GFM blocks during feature propagation and decoding, allowing a single backbone to produce both future geometry and actions.\n\nThis design equips the GFM with language-conditioned temporal world modeling using only minimal architectural modification, while preserving its rich geometric priors. On a broad suite of simulation and real-robot manipulation benchmarks, GAM is more accurate, more robust, faster, and lighter than current foundation-model-scale baselines."
+      },
+      "id": "1357577a"
+    },
+    {
+      "type": "image",
+      "visible": true,
+      "sectionLabel": "METHOD",
+      "title": "Causal Future Predictor Inside the GFM",
+      "content": {
+        "media": [
+          {
+            "type": "image",
+            "src": "",
+            "caption": "Observation encoding, future prediction, and action decoding inside one GFM.",
+            "alt": "Figure 2 from paper - GAM architecture with GFM shallow layers, language and robot-state conditioning, block-causal future predictor, GFM deep layers, future geometry decoding, and action chunk prediction."
+          }
+        ]
+      },
+      "id": "678ebceb"
+    },
+    {
+      "type": "text",
+      "visible": true,
+      "sectionLabel": "METHOD",
+      "title": "Shared Geometry-Action Token Space",
+      "content": {
+        "text": "GAM splits the pretrained GFM at layer $L_s$ and inserts a causal future predictor between shallow observation encoding and deep geometric decoding.\n\nThe predictor receives language, proprioception, previous action, and geometric tokens, then forecasts both future latent geometry and action tokens. The remaining GFM blocks propagate those predicted tokens, letting the final action head benefit from the same 3D decoding pathway used for future depth.\n\nThe training objective couples action execution with world modeling: $L_{total}=lambda_{act}L_{act}+lambda_{feat}L_{feat}+lambda_{depth}L_{depth}$."
+      },
+      "id": "832bcbd5"
+    },
+    {
+      "type": "results-table",
+      "visible": true,
+      "sectionLabel": "SIMULATION",
+      "title": "LIBERO-Plus CAMERA Robustness",
+      "content": {
+        "tableStyle": "boxed",
+        "tableDensity": "normal",
+        "tableAlign": "center",
+        "tables": [
+          {
+            "label": "Simulation CAMERA",
+            "headers": [
+              "Method",
+              "Size ↓",
+              "Orig. ↑",
+              "Plus ↑",
+              "CAMERA ↑"
+            ],
+            "rows": [
+              {
+                "cells": [
+                  "pi0.5",
+                  "3.3B",
+                  "96.9",
+                  "**84.6**",
+                  "72.0"
+                ],
+                "highlight": false
+              },
+              {
+                "cells": [
+                  "OpenVLA-OFT",
+                  "7B",
+                  "97.1",
+                  "69.6",
+                  "56.4"
+                ],
+                "highlight": false
+              },
+              {
+                "cells": [
+                  "Cosmos-Policy",
+                  "**2B**",
+                  "**98.5**",
+                  "82.4",
+                  "**73.4**"
+                ],
+                "highlight": false
+              },
+              {
+                "cells": [
+                  "GAM",
+                  "**1.4B**",
+                  "**97.6**",
+                  "**85.5**",
+                  "**83.1**"
+                ],
+                "highlight": true
+              }
+            ]
+          }
+        ]
+      },
+      "id": "f77ace02"
+    },
+    {
+      "type": "results-table",
+      "visible": true,
+      "sectionLabel": "REAL ROBOT",
+      "title": "ID and OOD CAMERA Transfer",
+      "content": {
+        "tableStyle": "boxed",
+        "tableDensity": "normal",
+        "tableAlign": "center",
+        "tables": [
+          {
+            "label": "Pick and Place",
+            "headers": [
+              "Method",
+              "ID ↑",
+              "OOD ↑"
+            ],
+            "rows": [
+              {
+                "cells": [
+                  "pi0.5",
+                  "**80**",
+                  "70"
+                ],
+                "highlight": false
+              },
+              {
+                "cells": [
+                  "Spatial Forcing",
+                  "80",
+                  "**70**"
+                ],
+                "highlight": false
+              },
+              {
+                "cells": [
+                  "GAM",
+                  "**100**",
+                  "**80**"
+                ],
+                "highlight": true
+              }
+            ]
+          },
+          {
+            "label": "Stack Milk and Cube",
+            "headers": [
+              "Method",
+              "ID ↑",
+              "OOD ↑"
+            ],
+            "rows": [
+              {
+                "cells": [
+                  "pi0.5",
+                  "**70**",
+                  "10"
+                ],
+                "highlight": false
+              },
+              {
+                "cells": [
+                  "Spatial Forcing",
+                  "30",
+                  "**10**"
+                ],
+                "highlight": false
+              },
+              {
+                "cells": [
+                  "GAM",
+                  "**80**",
+                  "**60**"
+                ],
+                "highlight": true
+              }
+            ]
+          },
+          {
+            "label": "Place Pot and Pan",
+            "headers": [
+              "Method",
+              "ID ↑",
+              "OOD ↑"
+            ],
+            "rows": [
+              {
+                "cells": [
+                  "pi0.5",
+                  "**20**",
+                  "10"
+                ],
+                "highlight": false
+              },
+              {
+                "cells": [
+                  "Spatial Forcing",
+                  "10",
+                  "**10**"
+                ],
+                "highlight": false
+              },
+              {
+                "cells": [
+                  "GAM",
+                  "**30**",
+                  "**20**"
+                ],
+                "highlight": true
+              }
+            ]
+          },
+          {
+            "label": "Insert Cube into Covered Pot",
+            "headers": [
+              "Method",
+              "ID ↑",
+              "OOD ↑"
+            ],
+            "rows": [
+              {
+                "cells": [
+                  "pi0.5",
+                  "**50**",
+                  "**40**"
+                ],
+                "highlight": false
+              },
+              {
+                "cells": [
+                  "Spatial Forcing",
+                  "30",
+                  "20"
+                ],
+                "highlight": false
+              },
+              {
+                "cells": [
+                  "GAM",
+                  "**50**",
+                  "**40**"
+                ],
+                "highlight": true
+              }
+            ]
+          }
+        ]
+      },
+      "id": "59257e79"
+    },
+    {
+      "type": "image",
+      "visible": true,
+      "sectionLabel": "REAL ROBOT",
+      "title": "Four Real-World Manipulation Tasks",
+      "content": {
+        "media": [
+          {
+            "type": "image",
+            "src": "",
+            "caption": "Real-robot results under ID and OOD camera setups.",
+            "alt": "Figure 3 from paper - four real-world robot tasks and grouped success-rate bars comparing GAM, pi0.5, and Spatial Forcing under in-domain and out-of-domain camera perturbations."
+          }
+        ]
+      },
+      "id": "a65792cb"
+    },
+    {
+      "type": "image-grid",
+      "visible": true,
+      "sectionLabel": "SIM VIDEOS",
+      "title": "Simulation CAMERA Perturbation Videos",
+      "content": {
+        "columns": 2,
+        "imageGridRows": 2,
+        "media": [
+          {
+            "type": "video",
+            "src": "",
+            "caption": "LIBERO-Plus CAMERA L1",
+            "alt": "Video slot - GAM rollout under mild LIBERO-Plus camera perturbation."
+          },
+          {
+            "type": "video",
+            "src": "",
+            "caption": "LIBERO-Plus CAMERA L3",
+            "alt": "Video slot - GAM rollout under medium LIBERO-Plus camera perturbation."
+          },
+          {
+            "type": "video",
+            "src": "",
+            "caption": "LIBERO-Plus CAMERA L5",
+            "alt": "Video slot - GAM rollout under severe LIBERO-Plus camera perturbation."
+          },
+          {
+            "type": "video",
+            "src": "",
+            "caption": "Baseline comparison",
+            "alt": "Video slot - side-by-side comparison between GAM and a VLA or WAM baseline under camera shift."
+          }
+        ]
+      },
+      "id": "e258df7d"
+    },
+    {
+      "type": "image-grid",
+      "visible": true,
+      "sectionLabel": "REAL VIDEOS",
+      "title": "Real-Robot CAMERA Transfer Videos",
+      "content": {
+        "columns": 2,
+        "imageGridRows": 2,
+        "media": [
+          {
+            "type": "video",
+            "src": "",
+            "caption": "Pick and Place",
+            "alt": "Video slot - real-world pick-and-place task under ID and OOD camera settings."
+          },
+          {
+            "type": "video",
+            "src": "",
+            "caption": "Stack Milk and Cube",
+            "alt": "Video slot - real-world stacking task under ID and OOD camera settings."
+          },
+          {
+            "type": "video",
+            "src": "",
+            "caption": "Place Pot and Pan",
+            "alt": "Video slot - real-world cooktop placement task under ID and OOD camera settings."
+          },
+          {
+            "type": "video",
+            "src": "",
+            "caption": "Insert Cube into Covered Pot",
+            "alt": "Video slot - real-world covered-pot insertion task under ID and OOD camera settings."
+          }
+        ]
+      },
+      "id": "92431db5"
+    },
+    {
+      "type": "image",
+      "visible": true,
+      "sectionLabel": "ANALYSIS",
+      "title": "CAMERA Difficulty Curve",
+      "content": {
+        "media": [
+          {
+            "type": "image",
+            "src": "",
+            "caption": "GAM leads across all CAMERA perturbation levels.",
+            "alt": "Figure 4 from paper - success rate versus camera perturbation difficulty levels L1 to L5, comparing GAM, Cosmos Policy, pi0.5, and ROCKET."
+          }
+        ]
+      },
+      "id": "85eead7b"
+    },
+    {
+      "type": "callout",
+      "visible": true,
+      "sectionLabel": "KEY MESSAGE",
+      "title": "Fast CAMERA-Robust Control",
+      "content": {
+        "text": "The top-level story should be visible before the reader reaches the method: GAM sits in the best corner of the tradeoff plot, combining low-latency single-pass inference with strong CAMERA robustness in both simulation and real-robot settings.",
+        "calloutIcon": "key",
+        "calloutTitle": "Speed plus CAMERA robustness"
+      },
+      "id": "ac93802d"
+    },
+    {
+      "type": "text",
+      "visible": true,
+      "sectionLabel": "ABLATION",
+      "title": "Split Layer Controls Geometric Decodability",
+      "content": {
+        "text": "The split layer $L_s$ determines whether predicted tokens can become usable 3D structure. The best split is $L_s=12$, where shallow GFM layers have extracted enough visual structure and deep GFM layers still have enough capacity to decode future geometry.\n\nWhen the predictor is inserted too early, the tokens are under-formed. When it is inserted too late, the remaining GFM blocks cannot integrate predicted future tokens into the pretrained geometric prior."
+      },
+      "id": "d581c54c"
+    },
+    {
+      "type": "bibtex",
+      "visible": true,
+      "title": "Citation",
+      "content": {
+        "bibtex": "@article{han2026geometric,\n  title={Geometric Action Model for Visuomotor Control},\n  author={Han, Jisang and Jeon, Seonghu and Jung, Jaewoo and Zurbrügg, René and An, Honggyu and Portela, Tifanny and Hutter, Marco and Pollefeys, Marc and Kim, Seungryong and Hong, Sunghwan},\n  journal={arXiv preprint},\n  year={2026}\n}"
+      },
+      "id": "5b97bad1"
+    }
+  ]
+}
