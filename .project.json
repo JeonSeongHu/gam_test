@@ -3,21 +3,21 @@
     "title": "Geometric Action Model for Visuomotor Control",
     "template": "cameo",
     "theme": {
-      "primaryColor": "#3F3F46",
-      "secondaryColor": "#71717A",
-      "accentColor": "#8EA8B8",
+      "primaryColor": "#521782",
+      "secondaryColor": "#5e2e84",
+      "accentColor": "#d0a8f0",
       "backgroundColor": "#FFFFFF",
       "surfaceColor": "#FAFAFA",
-      "textColor": "#27272A",
+      "textColor": "#310e4e",
       "textSecondaryColor": "#71717A",
-      "borderColor": "#E4E4E7",
+      "borderColor": "#807887",
       "fontFamily": "'Wanted Sans Variable', 'Wanted Sans', -apple-system, BlinkMacSystemFont, sans-serif",
       "headingFontFamily": "'Wanted Sans Variable', 'Wanted Sans', -apple-system, BlinkMacSystemFont, sans-serif",
       "monoFontFamily": "monospace",
       "baseFontSize": 15,
       "headingFontSize": 2.5,
       "bodyLineHeight": 1.625,
-      "borderRadius": 19,
+      "borderRadius": 0,
       "maxWidth": 1088,
       "sectionSpacing": 48,
       "contentPaddingX": 16,
@@ -28,15 +28,15 @@
       "navSideAlign": "top",
       "navBackground": "transparent",
       "navTextColor": "#71717A",
-      "navAccentColor": "#3F3F46",
+      "navAccentColor": "#521782",
       "heroStyle": "flat",
       "heroBackground": "#FAFAFA",
-      "heroGradientFrom": "#F0F4F6",
+      "heroGradientFrom": "#e7d4f7",
       "heroGradientTo": "#FFFFFF",
-      "heroTitleSize": 3.75,
-      "heroSubtitleSize": 1.25,
-      "headingStyle": "border-bottom",
-      "headingDecoColor": "#3F3F46",
+      "heroTitleSize": 4.25,
+      "heroSubtitleSize": 1.05,
+      "headingStyle": "plain",
+      "headingDecoColor": "#521782",
       "headingDecoWidth": 0,
       "headingDecoThickness": 2,
       "shadowStyle": "subtle",
@@ -47,9 +47,9 @@
       "contentBoxRadius": 12,
       "contentBoxPadding": 0,
       "tldrStyle": "filled",
-      "tldrBackground": "#F0F4F6",
-      "tldrBorderColor": "#3F3F46",
-      "tldrLabelColor": "#3F3F46",
+      "tldrBackground": "#F8F9FA",
+      "tldrBorderColor": "#521782",
+      "tldrLabelColor": "#521782",
       "calloutStyle": "full-border",
       "calloutBackground": "#F0FDFA",
       "calloutBorderColor": "#0F766E",
@@ -60,15 +60,15 @@
       "buttonBorderColor": "#E4E4E7",
       "buttonRadius": 9999,
       "buttonHoverEffect": "darken",
-      "authorLinkColor": "#3F3F46",
-      "tableHeaderBg": "#F0F4F6",
-      "tableHeaderColor": "#27272A",
-      "tableBorderColor": "#E4E4E7",
-      "tableHighlightBg": "#F0F4F6",
-      "tableHighlightColor": "#3F3F46",
+      "authorLinkColor": "#310e4e",
+      "tableHeaderBg": "#521782",
+      "tableHeaderColor": "#FFFFFF",
+      "tableBorderColor": "#E9ECEF",
+      "tableHighlightBg": "#E9ECEF",
+      "tableHighlightColor": "#310e4e",
       "bibtexStyle": "card",
       "bibtexBackground": "#FAFAFA",
-      "bibtexBorderColor": "#E4E4E7",
+      "bibtexBorderColor": "#807887",
       "mediaStyle": "plain",
       "mediaBorderRadius": 12,
       "mediaBoxPadding": 0,
@@ -93,7 +93,11 @@
       "sectionLabelSpacing": 0.12,
       "sectionLabelColor": "",
       "sectionTitleSize": 1.6,
-      "labelTitleGap": 10
+      "labelTitleGap": 10,
+      "authorFontSize": 1.1,
+      "authorLineHeight": 1,
+      "authorRowGap": 10,
+      "authorGap": 22
     }
   },
   "sections": [
@@ -107,7 +111,7 @@
       },
       "id": "a9c61bf3",
       "contentMaxWidth": 935,
-      "paddingBottom": 0
+      "paddingBottom": 5
     },
     {
       "type": "authors",
@@ -182,17 +186,6 @@
       "paddingBottom": 16
     },
     {
-      "type": "tldr",
-      "visible": true,
-      "title": "TL;DR",
-      "content": {
-        "text": "**GAM** makes a pretrained Geometric Foundation Model the shared substrate for action decoding and future geometry prediction. The headline story is speed plus CAMERA robustness: **6.9 ms inference** and 83.1% success under LIBERO-Plus camera perturbations.~#212529:~",
-        "blockHeight": 131,
-        "blockAlign": "center"
-      },
-      "id": "130aafb6"
-    },
-    {
       "type": "chart",
       "visible": true,
       "sectionLabel": "",
@@ -255,9 +248,9 @@
             "legendCustomY": 3
           }
         ],
-        "chartHeight": 341,
-        "chartMaxWidth": 530,
-        "blockAlign": "center",
+        "chartHeight": 361,
+        "chartMaxWidth": 491,
+        "blockAlign": "right",
         "columns": 1,
         "chart": {
           "chartType": "scatter",
@@ -316,11 +309,24 @@
         }
       },
       "id": "3ecc36fb",
-      "layoutGroupId": "layout-1df113a0",
+      "layoutGroupId": "layout-b065aedb",
       "layoutColumn": 0,
       "layoutGroupAnchor": true,
       "layoutSplit": 50,
       "layoutGap": 28
+    },
+    {
+      "type": "tldr",
+      "visible": true,
+      "title": "TL;DR",
+      "content": {
+        "text": "**GAM** makes a pretrained Geometric Foundation Model the shared substrate for action decoding and future geometry prediction. The headline story is speed plus CAMERA robustness: **6.9 ms inference** and 83.1% success under LIBERO-Plus camera perturbations.~#212529:~",
+        "blockHeight": 131,
+        "blockAlign": "center",
+        "blockWidth": 1340
+      },
+      "id": "130aafb6",
+      "contentMaxWidth": 1180
     },
     {
       "type": "teaser",
@@ -337,12 +343,12 @@
         ]
       },
       "id": "1cfb748f",
-      "layoutGroupId": "layout-1df113a0",
+      "paddingBottom": 200,
+      "layoutGroupId": "layout-b065aedb",
       "layoutColumn": 1,
       "layoutGroupAnchor": false,
       "layoutSplit": 50,
-      "layoutGap": 28,
-      "paddingBottom": 200
+      "layoutGap": 28
     },
     {
       "type": "image",
@@ -418,8 +424,8 @@
       "sectionLabel": "SIMULATION",
       "title": "LIBERO-Plus CAMERA Robustness",
       "content": {
-        "tableStyle": "boxed",
-        "tableDensity": "normal",
+        "tableStyle": "striped",
+        "tableDensity": "compact",
         "tableAlign": "center",
         "tables": [
           {
