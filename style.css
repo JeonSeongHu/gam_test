@@ -968,6 +968,7 @@ body { font-family: Inter, system-ui, -apple-system, sans-serif; color: var(--ap
 .chart-edit-toolbar button { min-width: 30px; padding: 0px 6px; border-radius: 6px; cursor: pointer; }
 .chart-font-select { border-radius: 6px; padding: 2px 20px 2px 7px; }
 .chart-edit-toolbar button:hover { border-color: var(--primary, #6366f1); color: var(--primary, #6366f1); }
+.chart-edit-toolbar button.active { border-color: var(--primary, #6366f1); color: var(--primary, #6366f1); background: color-mix(in srgb,var(--primary, #6366f1) 10%,white); }
 .media-resize-edge, .chart-resize-edge { position: absolute; z-index: 11; opacity: 0; transition: opacity 0.15s, background 0.15s, border-color 0.15s; }
 .media-editable:hover .media-resize-edge, .chart-size-box:hover .chart-resize-edge { opacity: 1; }
 .media-resize-right, .chart-resize-right { top: 8px; right: -5px; bottom: 8px; width: 10px; cursor: ew-resize; border-right: 2px solid rgba(99, 102, 241, 0.65); }
@@ -1091,9 +1092,9 @@ body { font-family: Inter, system-ui, -apple-system, sans-serif; color: var(--ap
 .chart-wrapper.legend-left { display: grid; grid-template-columns: auto minmax(0px, 1fr); gap: 18px; align-items: start; }
 .chart-wrapper svg { display: block; width: 100%; height: auto; }
 .chart-wrapper.chart-scatter svg { max-height: none; }
-.chart-legend { display: flex; flex-wrap: wrap; gap: var(--legend-gap, 10px); margin-bottom: 14px; justify-content: var(--legend-align, start); align-items: center; box-sizing: border-box; padding: var(--legend-box-pad-y, 0) var(--legend-box-pad-x, 0); }
+.chart-legend { display: flex; flex-wrap: wrap; gap: var(--legend-gap, 6px); margin-bottom: 14px; justify-content: var(--legend-align, start); align-items: center; box-sizing: border-box; padding: var(--legend-box-pad-y, 0) var(--legend-box-pad-x, 0); }
 .chart-legend-grid { display: grid; grid-auto-flow: row; align-items: center; justify-content: var(--legend-align, start); }
-.chart-wrapper.chart-scatter .chart-legend { gap: var(--legend-gap, 8px); margin: 2px 0px 0px; line-height: 1.15; }
+.chart-wrapper.chart-scatter .chart-legend { gap: var(--legend-gap, 4px); margin: 2px 0px 0px; line-height: 1.15; }
 .chart-legend-overlay-top { position: absolute; top: var(--legend-offset-y, 10px); left: var(--legend-offset-x, 12px); right: auto; z-index: 5; margin: 0px; width: max-content; max-width: calc(100% - max(var(--legend-offset-x, 12px),0px) - 8px); pointer-events: auto; }
 .chart-legend-overlay-top .chart-legend-item { pointer-events: auto; }
 .chart-legend-bg-transparent { background: transparent; }
@@ -1106,10 +1107,10 @@ body { font-family: Inter, system-ui, -apple-system, sans-serif; color: var(--ap
 .chart-legend-resize-handle { position: absolute; right: -6px; bottom: -6px; width: 12px; height: 12px; border-right: 2px solid var(--primary, #6366f1); border-bottom: 2px solid var(--primary, #6366f1); border-radius: 0px 0px 3px; background: rgba(255, 255, 255, 0.9); cursor: nwse-resize; opacity: 0; transition: opacity 0.15s; z-index: 2; }
 .chart-legend-resizable:hover .chart-legend-resize-handle { opacity: 1; }
 .chart-wrapper.chart-scatter .chart-legend-pill .chart-legend-item, .chart-wrapper.chart-scatter .chart-legend-boxed .chart-legend-item { padding: var(--legend-pad-y, 0) var(--legend-pad-x, 0); border: 0px; background: transparent; box-shadow: none; }
-.chart-wrapper.chart-scatter .chart-legend-item { gap: 0.45em; }
+.chart-wrapper.chart-scatter .chart-legend-item { gap: 0.3em; }
 .chart-legend-bottom { margin-top: 14px; margin-bottom: 0px; }
 .chart-legend-right, .chart-legend-left { margin: 0px; flex-direction: column; min-width: 140px; align-self: center; }
-.chart-legend-item { display: inline-flex; align-items: center; gap: 0.7em; color: var(--text, #1e293b); min-width: 0px; }
+.chart-legend-item { display: inline-flex; align-items: center; gap: 0.4em; color: var(--text, #1e293b); min-width: 0px; }
 .chart-legend-minimal .chart-legend-item { padding: 0px; }
 .chart-legend-pill .chart-legend-item { padding: var(--legend-pad-y, .45em) var(--legend-pad-x, .8em); border-radius: 999px; background: color-mix(in srgb,var(--surface, #fff) 72%,var(--bg, #f8fafc)); border: 1px solid color-mix(in srgb,var(--border-color, #e2e8f0) 70%,white); }
 .chart-legend-boxed .chart-legend-item { padding: var(--legend-pad-y, .5em) var(--legend-pad-x, .8em); border-radius: 12px; background: var(--bg, #fff); border: 1px solid var(--border-color, #e2e8f0); box-shadow: rgba(255, 255, 255, 0.5) 0px 1px inset; }
