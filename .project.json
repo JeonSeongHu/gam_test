@@ -25,7 +25,7 @@
       "navTopPreset": "default",
       "navSidePreset": "dots",
       "navSidePosition": "left",
-      "navSideAlign": "top",
+      "navSideAlign": "center",
       "navBackground": "transparent",
       "navTextColor": "#71717A",
       "navAccentColor": "#521782",
@@ -313,7 +313,8 @@
       "layoutColumn": 0,
       "layoutGroupAnchor": true,
       "layoutSplit": 50,
-      "layoutGap": 28
+      "layoutGap": 28,
+      "paddingTop": 34
     },
     {
       "type": "tldr",
@@ -743,18 +744,6 @@
       "id": "85eead7b"
     },
     {
-      "type": "callout",
-      "visible": true,
-      "sectionLabel": "KEY MESSAGE",
-      "title": "Fast CAMERA-Robust Control",
-      "content": {
-        "text": "The top-level story should be visible before the reader reaches the method: GAM sits in the best corner of the tradeoff plot, combining low-latency single-pass inference with strong CAMERA robustness in both simulation and real-robot settings.",
-        "calloutIcon": "key",
-        "calloutTitle": "Speed plus CAMERA robustness"
-      },
-      "id": "ac93802d"
-    },
-    {
       "type": "text",
       "visible": true,
       "sectionLabel": "ABLATION",
@@ -772,6 +761,23 @@
         "bibtex": "@article{han2026geometric,\n  title={Geometric Action Model for Visuomotor Control},\n  author={Han, Jisang and Jeon, Seonghu and Jung, Jaewoo and Zurbrügg, René and An, Honggyu and Portela, Tifanny and Hutter, Marco and Pollefeys, Marc and Kim, Seungryong and Hong, Sunghwan},\n  journal={arXiv preprint},\n  year={2026}\n}"
       },
       "id": "5b97bad1"
+    },
+    {
+      "id": "a2567edc",
+      "type": "nav-sidebar",
+      "visible": true,
+      "content": {
+        "navAutoFromSections": true,
+        "navItems": [],
+        "navBackground": "transparent",
+        "navTextColor": "#64748b",
+        "navAccentColor": "",
+        "navSticky": true,
+        "navShowDots": true,
+        "navShowLabels": true,
+        "navLogo": ""
+      },
+      "title": "Sidebar Navigation"
     }
   ]
 }
