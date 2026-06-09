@@ -8,14 +8,14 @@
       "accentColor": "#d0a8f0",
       "backgroundColor": "#FFFFFF",
       "surfaceColor": "#FAFAFA",
-      "textColor": "#310e4e",
+      "textColor": "#212529",
       "textSecondaryColor": "#71717A",
       "borderColor": "#807887",
       "fontFamily": "'Google Sans Flex', 'Google Sans Flex Variable', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
       "headingFontFamily": "'Google Sans Flex', 'Google Sans Flex Variable', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
       "monoFontFamily": "monospace",
       "baseFontSize": 17,
-      "headingFontSize": 2.5,
+      "headingFontSize": 1.9000000000000001,
       "bodyLineHeight": 1.625,
       "borderRadius": 14,
       "maxWidth": 1120,
@@ -90,17 +90,19 @@
       "bulletStyle": "numbered",
       "showSectionLabel": false,
       "sectionLabelSize": 0.85,
-      "sectionLabelSpacing": 0.12,
+      "sectionLabelSpacing": 0.14,
       "sectionLabelColor": "",
       "sectionTitleSize": 1.6,
       "labelTitleGap": 10,
-      "authorFontSize": 1.1,
+      "authorFontSize": 0.9,
       "authorLineHeight": 1,
       "authorRowGap": 10,
       "authorGap": 22,
       "tldrLineHeight": 1.55,
       "tldrFontSize": 1.1500000000000001,
-      "heroHighlightColor": "#f6eefc"
+      "heroHighlightColor": "#f6eefc",
+      "headingTextColor": "#521782",
+      "subsectionFontSize": 1.25
     }
   },
   "sections": [
@@ -292,8 +294,7 @@
       "visible": true,
       "title": "Abstract",
       "content": {
-        "text": "Generalist robot policies must follow user instructions while reasoning about how objects, cameras, and robot actions interact in the 3D physical world. Recent vision-language-action models and video world-action models inherit strong semantic or temporal priors from large-scale foundation models, but they still operate primarily on 2D image frames or 2D-derived latent spaces, leaving the geometry required for contact-rich manipulation implicit.\n\nWe propose Geometric Action Model (GAM), a language-conditioned manipulation policy that directly repurposes a pretrained Geometric Foundation Model (GFM) as a shared substrate for perception, temporal prediction, and action decoding. GAM splits the GFM at an intermediate layer, where the shallow layers serve as an observation encoder, while a causal future predictor is inserted at the split layer to forecast future latent tokens conditioned on language, proprioception, and action history. The predicted future tokens are then routed through the remaining GFM blocks during feature propagation and decoding, allowing a single backbone to produce both future geometry and actions.\n\nThis design equips the GFM with language-conditioned temporal world modeling using only minimal architectural modification, while preserving its rich geometric priors. On a broad suite of simulation and real-robot manipulation benchmarks, GAM is more accurate, more robust, faster, and lighter than current foundation-model-scale baselines.",
-        "blockHeight": 407
+        "text": "Generalist robot policies must follow user instructions while reasoning about how objects, cameras, and robot actions interact in the 3D physical world. Recent vision-language-action models and video world-action models inherit strong semantic or temporal priors from large-scale foundation models, but they still operate primarily on 2D image frames or 2D-derived latent spaces, leaving the geometry required for contact-rich manipulation implicit.\n\nWe propose Geometric Action Model (GAM), a language-conditioned manipulation policy that directly repurposes a pretrained Geometric Foundation Model (GFM) as a shared substrate for perception, temporal prediction, and action decoding. GAM splits the GFM at an intermediate layer, where the shallow layers serve as an observation encoder, while a causal future predictor is inserted at the split layer to forecast future latent tokens conditioned on language, proprioception, and action history. The predicted future tokens are then routed through the remaining GFM blocks during feature propagation and decoding, allowing a single backbone to produce both future geometry and actions.\n\nThis design equips the GFM with language-conditioned temporal world modeling using only minimal architectural modification, while preserving its rich geometric priors. On a broad suite of simulation and real-robot manipulation benchmarks, GAM is more accurate, more robust, faster, and lighter than current foundation-model-scale baselines."
       },
       "id": "abstract-section"
     },
@@ -310,8 +311,7 @@
             "caption": "Figure 2: Observation encoding, future prediction, and action decoding inside one GFM.",
             "alt": "GAM architecture diagram"
           }
-        ],
-        "blockWidth": 1089
+        ]
       },
       "id": "method-section"
     },
