@@ -1,0 +1,104 @@
+# LIBERO HDF5 single-GPU smoke for unified FuturePredictor with chunked action head.
+# Reads original LIBERO HDF5 demos directly, so frame_indices align with HDF5 GT-depth exports.
+
+stage_1:
+  ckpt_path: "${oc.env:DA3_ROOT,.}/checkpoints/track4world_da3.pth"
+  encoder_input_size: 224
+  normalization_stat_path: null
+
+da3_finetune:
+  enabled: true
+  freeze_blocks_before: 13
+  n_action_steps: 7
+  n_views: 2
+  use_temporal_embed: false
+  action_input_rate: 0.4
+
+action_head:
+  type: "mlp_resnet"
+  input_dim: 1536
+  hidden_dim: 1536
+  n_dims: 7
+  chunk_size: 4
+  chunk_position_encoding: "learned"
+  num_blocks: 2
+  pool_mode: "mean"
+
+regularization:
+  lambda_feat: 0.03
+  layer_weight_min: 0.5
+  adaptive_lambda: false
+  lambda_depth: 0.0
+  depth_grad_weight: 1.0
+  lambda_camera: 0.0
+
+proprioception:
+  proprio_dim: 7
+
+predictor:
+  enabled: true
+  d_model: 1024
+  depth: 12
+  num_heads: 16
+  ffn_ratio: 4.0
+  dropout: 0.0
+  num_patches_per_view: 256
+  use_language: true
+  language_dim: 768
+  language_len: 77
+  clip_model: "openai/clip-vit-large-patch14"
+  lambda_feat_future: 1.0
+  lambda_sigreg: 0.0
+  H_choices: [1, 2, 3]
+  H_weights: [0.5, 0.3, 0.2]
+  num_register_tokens: 0
+
+training:
+  global_batch_size: 1
+  micro_batch_size: 1
+  base_lr: 5.0e-5
+  head_lr_mult: 10.0
+  weight_decay: 0.0
+  lambda_action: 3.0
+  grad_accum_steps: 1
+  epochs: 1
+  clip_grad: 1.0
+  warmup_steps: 0
+  max_steps: 20
+  min_lr_ratio: 0.01
+  log_every: 1
+  ckpt_every: 999999
+  vis_every: 10
+  eval_every: 999999
+  global_seed: 42
+  num_workers: 2
+  bf16: true
+  compile: false
+
+dataset:
+  type: "libero_hdf5"
+  hdf5_root: "${oc.env:DA3_ROOT,.}/data/libero_hdf5/yifengzhu-hf/LIBERO-datasets"
+  stats_dir: "${oc.env:DA3_ROOT,.}/data/libero_hdf5/_stats"
+  image_size: [224, 224]
+  future_steps: 6
+  chunk_size: 4
+  include_current_action: true
+  eval_ratio: 0.05
+  proprio_dim: 7
+  n_views: 2
+  source_fps: 20
+  # LIBERO HDF5 RGB/depth are stored 180 degrees rotated relative to the
+  # natural robosuite camera view. Correct both before DA3/depth supervision.
+  da3_input_rotate180: true
+  da3_input_vflip: false
+  gt_depth_root: null
+  gt_depth_rotate180: false
+  gt_depth_vflip: false
+  gt_depth_require_geometry: true
+  gt_depth_scale_mode: "pointmap"
+  gt_depth_min_meters: 1.0e-3
+  action_stats_samples: 256
+  proprio_stats_samples: 256
+  camera_keys: ["agentview_rgb", "eye_in_hand_rgb"]
+
+use_dit: false

@@ -1,0 +1,227 @@
+# CSCS-local longterm H1 variant for a 2-node micro-batch 20 resume to 500k.
+# Adds deterministic sampled LIBERO-Plus monitoring alongside the plain
+# LIBERO_10 max-1000 train-time rollout profile.
+#
+# LR uses sqrt batch scaling from the previous batch-24 run:
+# batch 160 / 24 = 6.667, sqrt(6.667) = 2.582, so base_lr 2e-5 -> 5.16e-5.
+
+stage_1:
+  ckpt_path: ${oc.env:DA3_ROOT,.}/checkpoints/track4world_da3.pth
+  encoder_input_size: 224
+  normalization_stat_path: null
+da3_finetune:
+  enabled: true
+  freeze_blocks_before: 13
+  n_action_steps: 9
+  n_views: 2
+  use_temporal_embed: false
+  action_input_rate: 0.4
+action_head:
+  type: mlp_resnet
+  input_dim: 1536
+  hidden_dim: 1536
+  n_dims: 7
+  chunk_size: 8
+  chunk_position_encoding: learned
+  num_blocks: 2
+  pool_mode: mean
+regularization:
+  lambda_feat: 0.0
+  layer_weight_min: 0.5
+  adaptive_lambda: false
+  lambda_depth: 3.0
+  depth_grad_weight: 1.0
+  depth_decode_chunk_size: 8
+  lambda_camera: 0.0
+  teacher_depth_fallback: false
+  lambda_path_b_deep_feat_reg: 0.0
+  deep_feat_reg_layer_weight_min: 0.5
+proprioception:
+  enabled: true
+  proprio_dim: 7
+  hidden_dim: 256
+predictor:
+  enabled: true
+  type: gam
+  d_model: 1024
+  depth: 12
+  num_heads: 16
+  ffn_ratio: 4.0
+  dropout: 0.0
+  num_patches_per_view: 256
+  use_language: true
+  language_encoder_type: t5
+  language_dim: 768
+  language_len: 77
+  clip_model: openai/clip-vit-large-patch14
+  t5_model: google-t5/t5-base
+  condition_mode: concat
+  input_proj_norm: ln
+  sigreg_proj_dim: 256
+  sigreg_n_projections: 1024
+  sigreg_knots: 17
+  sigreg_max_knot: 3.0
+  sigreg_redraw: true
+  sigreg_pool_mode: cls
+  lambda_feat_current: 0.0
+  lambda_feat_future: 1.0
+  lambda_sigreg: 0.0
+  feature_loss_type: l1
+  H_choices:
+  - 1
+  H_weights:
+  - 1.0
+  num_register_tokens: 0
+  deep_gradient_checkpointing: false
+training:
+  global_batch_size: 160
+  micro_batch_size: 20
+  base_lr: 5.16e-05
+  head_lr_mult: 10.0
+  predictor_lr_mult: 10.0
+  adam_eps: 1.0e-06
+  adam_beta1: 0.9
+  adam_beta2: 0.95
+  weight_decay: 0.0
+  lambda_action: 3.0
+  lambda_action_direct: 0.0
+  lambda_action_refine: 1.0
+  grad_accum_steps: 1
+  epochs: 500000
+  clip_grad: 1.0
+  warmup_steps: 0
+  max_steps: 500000
+  min_lr_ratio: 1.0
+  log_every: 50
+  ckpt_every: 2000
+  vis_every: 500
+  eval_every: 4000
+  global_seed: 42
+  num_workers: 8
+  bf16: true
+  compile: false
+  persistent_workers: true
+  ema:
+    enabled: false
+    decay: 0.999
+    device: cuda
+    dtype: float32
+    update_every: 1
+    start_step: 0
+    include:
+    - future_predictor
+    - action_head
+    - text_conditioner_proj
+    - student_da3_blocks
+    student_da3_blocks_start: 13
+    student_da3_blocks_end: 39
+  closed_loop_evals:
+  - name: libero10_train_max1000
+    enabled: true
+    benchmark: libero
+    eval_num_active_ranks: 8
+    use_ema: false
+    first_eval_step: 1
+    eval_every: 4000
+    history_horizon: 1
+    rollout_decode_horizon: 1
+    suites:
+    - libero_10
+    num_tasks_per_suite: all
+    num_trials_per_task: 5
+    num_steps_wait: 10
+    action_horizon: 1
+    action_repeat: 1
+    action_repeat_mode: split_delta
+    env_control_hz: 20
+    policy_hz: 20
+    camera_size: 256
+    seed: 7
+    env_seed: 0
+    log_video: true
+    video_max_per_eval: 4
+    detailed_video: true
+    max_steps_by_suite:
+      libero_spatial: 220
+      libero_object: 280
+      libero_goal: 300
+      libero_10: 1000
+  - name: libero_plus10_10each_max1000
+    enabled: true
+    benchmark: libero_plus
+    eval_num_active_ranks: 8
+    use_ema: false
+    first_eval_step: 1
+    eval_every: 4000
+    history_horizon: 1
+    rollout_decode_horizon: 1
+    suites:
+    - libero_10
+    num_tasks_per_suite: all
+    num_trials_per_task: 1
+    num_steps_wait: 10
+    action_horizon: 1
+    action_repeat: 1
+    action_repeat_mode: split_delta
+    env_control_hz: 20
+    policy_hz: 20
+    camera_size: 256
+    seed: 7
+    env_seed: 0
+    log_video: false
+    video_max_per_eval: 0
+    detailed_video: false
+    plus_perturbation: all
+    plus_official_category: all
+    plus_subset:
+      group_by: official_category
+      samples_per_group: 10
+      sample_seed: 195
+    max_steps_by_suite:
+      libero_spatial: 220
+      libero_object: 280
+      libero_goal: 300
+      libero_10: 1000
+dataset:
+  type: libero_hdf5
+  dataset_name: libero_noop_10
+  hdf5_root: ${oc.env:DA3_ROOT,.}/data/libero_noop
+  stats_dir: ${oc.env:DA3_ROOT,.}/data/libero_noop/_stats
+  image_size:
+  - 224
+  - 224
+  future_steps: 8
+  chunk_size: 8
+  include_current_action: true
+  eval_ratio: 0.05
+  proprio_dim: 7
+  n_views: 2
+  source_fps: 20
+  da3_input_rotate180: false
+  da3_input_hflip: true
+  da3_input_vflip: false
+  gt_depth_root: null
+  gt_depth_rotate180: false
+  gt_depth_hflip: true
+  gt_depth_vflip: false
+  gt_depth_require_geometry: true
+  gt_depth_scale_mode: pointmap
+  gt_depth_min_meters: 0.001
+  action_stats_samples: -1
+  proprio_stats_samples: -1
+  camera_keys:
+  - agentview_rgb
+  - eye_in_hand_rgb
+  color_jitter_brightness: 0.0
+  color_jitter_contrast: 0.0
+  color_jitter_saturation: 0.0
+  color_jitter_hue: 0.0
+  suites:
+  - libero_10
+  filter_noops: false
+  noop_threshold: 0.0001
+  uniform_action_sampling: true
+  norm_mode: q01_q99
+  action_norm_mode: q01_q99
+  proprio_norm_mode: q01_q99
+use_dit: false

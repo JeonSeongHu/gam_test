@@ -1,0 +1,24 @@
+# Conda environment for the DA3-Giant gam LIBERO / LIBERO-Plus release.
+# Create:  conda env create -f environment.yml  &&  conda activate da3-libero
+# For the exact validated pin set used on the original (CSCS GH200) cluster,
+# see requirements-cscs.lock instead.
+name: da3-libero
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip>=24
+  - ffmpeg          # video encode/decode for rollout artifacts
+  # System GL libs for headless MuJoCo rendering (LIBERO closed-loop eval).
+  # On a machine with an NVIDIA driver, set MUJOCO_GL=egl (uses the system EGL);
+  # mesalib provides an OSMesa software fallback (MUJOCO_GL=osmesa).
+  - mesalib
+  - pip:
+      # torch with CUDA — drop/adjust the index for your platform (CPU/ROCm/aarch64).
+      - --extra-index-url https://download.pytorch.org/whl/cu124
+      - -r requirements.txt
+# After creating the env:
+#   export PYTHONPATH=src:$PYTHONPATH
+#   export DA3_ROOT=/path/to/data_root   (configs resolve data/ckpt paths under this)
+#   export MUJOCO_GL=egl                 (or osmesa for software rendering)
+# Then clone the DA3 backbone (Depth-Anything-3) and install LIBERO per README.

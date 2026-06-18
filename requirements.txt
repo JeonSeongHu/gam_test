@@ -1,0 +1,31 @@
+# Core training + inference deps for DA3-Giant gam LIBERO / LIBERO-Plus.
+# Versions mirror the validated environment in requirements-cscs.lock; pins are
+# loosened here for portability. For an exact reproduction use requirements-cscs.lock.
+#
+# NOTE: torch is intentionally unpinned — install the build matching your CUDA /
+# platform (CSCS used a torch 2.8 aarch64/GH200 wheel). torch >= 2.4 is required
+# for flex_attention / BlockMask used by the predictor.
+
+torch>=2.4
+deepspeed==0.18.8
+transformers==5.5.4
+timm==1.0.26
+omegaconf==2.3.0
+einops==0.8.1
+safetensors==0.5.3
+numpy==1.26.4
+pillow==11.2.1
+imageio==2.37.3
+opencv-python
+h5py==3.16.0
+wandb==0.24.2
+
+# LIBERO HDF5 demos are read with h5py (above). Training is LIBERO-only.
+
+# Closed-loop simulator eval (LIBERO + LIBERO-Plus). The LIBERO benchmark package +
+# assets install from source: https://github.com/Lifelong-Robot-Learning/LIBERO
+# LIBERO-Plus perturbed-task benchmark installs from its own source (sylvestf/LIBERO-plus).
+robosuite==1.5.1
+mujoco
+
+# DA3 backbone: see Depth-Anything-3/ (install its own requirements).

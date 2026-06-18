@@ -1,0 +1,108 @@
+# LIBERO original-HDF5 depth-loss probe for the v2 ref-target bs24 setting.
+# Starts from the v2 ref-target 0008000 checkpoint with the same model,
+# batch size, LR, max-step budget, and H curriculum as
+# robot_libero_unified_cscs_bs24.yaml.
+
+stage_1:
+  ckpt_path: "${oc.env:DA3_ROOT,.}/checkpoints/track4world_da3.pth"
+  encoder_input_size: 224
+  normalization_stat_path: null
+
+da3_finetune:
+  enabled: true
+  freeze_blocks_before: 13
+  n_action_steps: 7
+  n_views: 2
+  use_temporal_embed: false
+  action_input_rate: 0.4
+
+action_head:
+  type: "mlp_resnet"
+  input_dim: 1536
+  hidden_dim: 1536
+  n_dims: 7
+  chunk_size: 1
+  num_blocks: 2
+  pool_mode: "mean"
+
+regularization:
+  lambda_feat: 0.03
+  layer_weight_min: 0.5
+  adaptive_lambda: false
+  # Conservative first probe: add DA3-style pointmap-normalized GT-depth loss
+  # without making it dominate the frozen DA3 future-feature target.
+  lambda_depth: 0.05
+  depth_grad_weight: 1.0
+  depth_decode_chunk_size: 1
+  depth_future_steps: 1
+  depth_decode_context: "future_only"
+  lambda_camera: 0.0
+
+proprioception:
+  proprio_dim: 7
+
+predictor:
+  enabled: true
+  d_model: 1024
+  depth: 12
+  num_heads: 16
+  ffn_ratio: 4.0
+  dropout: 0.0
+  num_patches_per_view: 256
+  use_language: true
+  language_dim: 768
+  language_len: 77
+  clip_model: "openai/clip-vit-large-patch14"
+  lambda_feat_future: 1.0
+  lambda_sigreg: 0.0
+  H_choices: [1, 2, 3]
+  H_weights: [0.5, 0.3, 0.2]
+  num_register_tokens: 0
+
+training:
+  global_batch_size: 24
+  micro_batch_size: 6
+  base_lr: 5.0e-5
+  head_lr_mult: 10.0
+  weight_decay: 0.0
+  lambda_action: 3.0
+  grad_accum_steps: 1
+  epochs: 500000
+  clip_grad: 1.0
+  warmup_steps: 500
+  max_steps: 50000
+  min_lr_ratio: 0.01
+  log_every: 25
+  ckpt_every: 2000
+  vis_every: 500
+  eval_every: 999999
+  global_seed: 42
+  num_workers: 4
+  bf16: true
+  compile: false
+
+dataset:
+  type: "libero_hdf5"
+  hdf5_root: "${oc.env:DA3_ROOT,.}/data/libero_hdf5/yifengzhu-hf/LIBERO-datasets"
+  stats_dir: "${oc.env:DA3_ROOT,.}/data/libero_hdf5/_stats"
+  image_size: [224, 224]
+  future_steps: 6
+  chunk_size: 1
+  include_current_action: true
+  eval_ratio: 0.05
+  proprio_dim: 7
+  n_views: 2
+  source_fps: 20
+  da3_input_rotate180: true
+  da3_input_vflip: false
+  gt_depth_root: "${oc.env:DA3_ROOT,.}/gt_depth/libero_aligned_hide_sites_fast"
+  gt_depth_rotate180: true
+  gt_depth_vflip: false
+  gt_depth_require_geometry: true
+  gt_depth_scale_mode: "pointmap"
+  gt_depth_min_meters: 1.0e-3
+  action_stats_samples: 10000
+  proprio_stats_samples: 10000
+  camera_keys: ["agentview_rgb", "eye_in_hand_rgb"]
+
+use_dit: false
