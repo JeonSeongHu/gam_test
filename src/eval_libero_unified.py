@@ -128,6 +128,148 @@ from eval_video import (
 )
 
 
+# ---------------------------------------------------------------------------
+# Optional CUDA-graph inference compile.
+#
+# Gated entirely by env vars; the DEFAULT (DA3_COMPILE_INFERENCE unset/none)
+# path is a complete no-op — no torch.compile, no cudagraph_mark_step_begin.
+#
+#   DA3_COMPILE_INFERENCE      : "none" (default) | "all" | comma subset of
+#                                {predictor, shallow, propagate, action_head}
+#   DA3_COMPILE_INFERENCE_MODE : reduce-overhead (default) | max-autotune |
+#                                max-autotune-no-cudagraphs | default
+#   DA3_CUDAGRAPH_CLONE        : "1" (default) | "0" — wrap compiled outputs in
+#                                the clone module for CUDA-graph modes
+# ---------------------------------------------------------------------------
+
+# CUDA-graph compile modes write outputs into static graph buffers that the
+# next graph replay overwrites. shallow12_ar / GAM keeps shallow tokens in its
+# history and threads module outputs across separate compiled graphs, so a raw
+# graph-buffer output raises "accessing tensor output of CUDAGraphs that has
+# been overwritten by a subsequent run". _CloneOutputModule clones each
+# compiled module's outputs so callers hold independent memory. One extra
+# memcpy is negligible next to the kernel-launch savings.
+_CUDAGRAPH_COMPILE_MODES = {"reduce-overhead", "max-autotune"}
+_VALID_INFERENCE_COMPILE_MODES = (
+    "reduce-overhead",
+    "max-autotune",
+    "max-autotune-no-cudagraphs",
+    "default",
+)
+_INFERENCE_COMPILE_TARGETS = {"predictor", "shallow", "propagate", "action_head"}
+
+# Module-level flag: True once at least one inference target was compiled with
+# a CUDA-graph mode, so call_policy knows to emit cudagraph_mark_step_begin().
+# Stays False on the default (none) path, keeping the rollout a pure no-op.
+_INFERENCE_CUDAGRAPH_ACTIVE = False
+
+try:
+    import torch.utils._pytree as _clone_pytree
+except Exception:  # noqa: BLE001
+    _clone_pytree = None
+
+
+def _clone_one(x: Any) -> Any:
+    return x.clone() if isinstance(x, torch.Tensor) else x
+
+
+class _CloneOutputModule(torch.nn.Module):
+    """Wrap a compiled callable so its outputs are cloned out of the CUDA-graph
+    static buffers before returning. Implemented as an nn.Module so it can be
+    assigned to nn.Module submodule attributes (e.g. model.action_head) as well
+    as bound-method slots."""
+
+    def __init__(self, inner: Any) -> None:
+        super().__init__()
+        self.inner = inner
+
+    def forward(self, *args: Any, **kwargs: Any) -> Any:
+        out = self.inner(*args, **kwargs)
+        if _clone_pytree is not None:
+            return _clone_pytree.tree_map(_clone_one, out)
+        if isinstance(out, torch.Tensor):
+            return out.clone()
+        if isinstance(out, (tuple, list)):
+            return type(out)(_clone_one(o) for o in out)
+        if isinstance(out, dict):
+            return {k: _clone_one(v) for k, v in out.items()}
+        return out
+
+    def __getattr__(self, name: str) -> Any:
+        # nn.Module.__getattr__ handles params/buffers/submodules (including
+        # our 'inner'); fall through to the wrapped module's own attributes
+        # (e.g. predictor.language_len, .rope) so callers that read attributes
+        # off the compiled module keep working.
+        try:
+            return super().__getattr__(name)
+        except AttributeError:
+            inner = super().__getattr__("inner")
+            return getattr(inner, name)
+
+
+def _resolve_inference_compile_targets(raw: str) -> set[str]:
+    """Parse DA3_COMPILE_INFERENCE into a set of target labels."""
+    raw = str(raw).strip().lower()
+    if raw in {"", "0", "false", "off", "none", "no"}:
+        return set()
+    if raw in {"1", "true", "on", "yes", "all"}:
+        return set(_INFERENCE_COMPILE_TARGETS)
+    aliases = {
+        "future_predictor": "predictor",
+        "fp": "predictor",
+        "shallow_encoder": "shallow",
+        "encode_shallow": "shallow",
+        "deep": "propagate",
+        "deep_propagate": "propagate",
+        "propagation": "propagate",
+        "head": "action_head",
+        "actionhead": "action_head",
+    }
+    out: set[str] = set()
+    for part in raw.replace("+", ",").replace(";", ",").split(","):
+        token = aliases.get(part.strip(), part.strip())
+        if not token:
+            continue
+        if token not in _INFERENCE_COMPILE_TARGETS:
+            raise ValueError(
+                "DA3_COMPILE_INFERENCE must be none, all, or a comma-separated "
+                "subset of predictor, shallow, propagate, action_head; got "
+                f"{raw!r}."
+            )
+        out.add(token)
+    return out
+
+
+def _resolve_inference_compile_mode() -> str:
+    mode = str(os.environ.get("DA3_COMPILE_INFERENCE_MODE", "reduce-overhead")).strip().lower()
+    if mode not in _VALID_INFERENCE_COMPILE_MODES:
+        raise ValueError(
+            "DA3_COMPILE_INFERENCE_MODE must be one of "
+            f"{_VALID_INFERENCE_COMPILE_MODES}; got {mode!r}."
+        )
+    return mode
+
+
+def _compile_for_inference(label: str, target: Any, mode: str, clone: bool) -> Any:
+    """torch.compile a target and (for CUDA-graph modes) clone its outputs.
+
+    Marks the module-level CUDA-graph-active flag when a CUDA-graph mode is
+    selected, so call_policy emits cudagraph_mark_step_begin() at rollout time.
+    """
+    global _INFERENCE_CUDAGRAPH_ACTIVE
+    if not hasattr(torch, "compile"):
+        raise RuntimeError(
+            "DA3_COMPILE_INFERENCE requested, but this PyTorch build has no torch.compile."
+        )
+    compiled = torch.compile(target, mode=mode, dynamic=False)
+    if mode in _CUDAGRAPH_COMPILE_MODES:
+        _INFERENCE_CUDAGRAPH_ACTIVE = True
+        if clone:
+            compiled = _CloneOutputModule(compiled)
+    print(f"[compile-inference] {label}: mode={mode} clone={clone and mode in _CUDAGRAPH_COMPILE_MODES}")
+    return compiled
+
+
 LIBERO_SUITES = ("libero_spatial", "libero_object", "libero_goal", "libero_10")
 LIBERO_SUITE_ORDER = {
     "libero_spatial": 0,
@@ -1880,6 +2022,10 @@ def load_stage1_policy(
         ckpt.get("future_predictor") is not None or _preloaded_fp is not None
     )
     predictor_type = str(predictor_cfg.get("type", predictor_cfg.get("architecture", "level0"))).lower()
+    # `shallow12_ar` is the pre-rename name of `gam`; normalize so checkpoints
+    # saved before the rename take the gam AR rollout path (not the legacy else).
+    if predictor_type == "shallow12_ar":
+        predictor_type = "gam"
     future_predictor = None
     text_conditioner = None
     text_cache: dict[str, dict[str, torch.Tensor]] = {}
@@ -1967,6 +2113,443 @@ def load_stage1_policy(
                 _log_incompatible_keys("stage1.text_conditioner_proj_ema", text_ema_load)
                 ema_loaded_keys.append("text_conditioner_proj_ema")
             text_conditioner.requires_grad_(False)
+
+    # --- Optional CUDA-graph inference compile + DA3_MAX_OPTIMIZE fused path ---
+    #
+    # Two env-gated tiers, both no-ops by default:
+    #   * DA3_COMPILE_INFERENCE (handled by _resolve_inference_compile_targets):
+    #     per-submodule torch.compile of {predictor, shallow, propagate,
+    #     action_head}. Existing simplified port.
+    #   * DA3_MAX_OPTIMIZE=1: in addition, prebakes the predictor / DA3 RoPE
+    #     builders into graph-stable static buffers, casts weights to bf16, and
+    #     FUSES predictor -> DA3 deep propagation -> action head (optionally with
+    #     the shallow encoder folded in) into a single compiled callable so the
+    #     whole h=1 forward replays as one CUDA graph (~6.9 ms model-only).
+    #
+    # When BOTH DA3_MAX_OPTIMIZE is unset AND DA3_COMPILE_INFERENCE is
+    # unset/"none", `_inference_compile_targets` is empty and `max_optimize_active`
+    # is False: every branch below is skipped, no monkey-patch / bf16 cast /
+    # compile / fused callable runs, and behaviour is byte-identical to the
+    # uncompiled path. This is the top correctness bar.
+    #
+    # This block lives here (after the predictor/text build, before the AR
+    # generators + policy closures) so the fused callables it builds are visible
+    # to `_generate_gam_chunks` and `policy` as free variables. The compiled
+    # submodule slots (`future_predictor`, `model.student_da3.*`,
+    # `model.action_head`) are read lazily at rollout time, so reassigning them
+    # here is observed by those closures.
+    _inference_compile_targets = _resolve_inference_compile_targets(
+        os.environ.get("DA3_COMPILE_INFERENCE", "none")
+    )
+    max_optimize_active = os.environ.get("DA3_MAX_OPTIMIZE") == "1"
+    _inference_compile_info: dict[str, Any] = {}
+    # Resolve the compile mode only when something will actually compile, so the
+    # default no-op path never touches DA3_COMPILE_INFERENCE_MODE validation.
+    _inference_compile_mode = (
+        _resolve_inference_compile_mode()
+        if (_inference_compile_targets or max_optimize_active)
+        else "reduce-overhead"
+    )
+    _cudagraph_clone = os.environ.get("DA3_CUDAGRAPH_CLONE", "1") == "1"
+    # FUSE only under max-optimize and only when a predictor exists; the fused
+    # callables replace the separate predictor/propagate/action_head graphs.
+    _fuse_h1 = bool(max_optimize_active) and future_predictor is not None
+    fused_h1_inference = None
+    fused_h1_inference_with_shallow = None
+
+    if max_optimize_active and future_predictor is not None:
+        _max_optimize_meta: dict[str, Any] = {"rope_positions_cache": False, "bf16_cast": False}
+        # 1) Graph-STABLE, graph-INTERNAL RoPE positions for the predictor.
+        # build_positions does a torch.empty dynamic alloc that breaks the CUDA
+        # graph. For h=1 inference the position tensor is fully deterministic, so
+        # PREBAKE it once (eagerly, before compile) into a static buffer and patch
+        # build_positions to return it. It then runs INSIDE the graph with zero
+        # allocation, so the predictor fuses into a single CUDA graph. The cos/sin
+        # data_ptr cache is bypassed so cos/sin is recomputed in-graph from the
+        # static positions (identical across depth blocks).
+        try:
+            rope_module = getattr(future_predictor, "rope", None)
+            if rope_module is not None and hasattr(rope_module, "build_positions"):
+                _orig_build_positions = rope_module.build_positions
+                _V_h1 = len(rollout_camera_keys) if rollout_camera_keys else 2
+                _np_pv = int(getattr(future_predictor, "num_patches_per_view", 256))
+                _npv = int(getattr(future_predictor, "num_prefix_visual", 1))
+                _frozen_positions = None
+                try:
+                    _frozen_positions = _orig_build_positions(1, _V_h1, _np_pv, _npv, device)
+                except Exception:  # noqa: BLE001
+                    _frozen_positions = None
+
+                def _h1_build_positions(H, V, num_patches, num_prefix_visual, device, *,
+                                        __frozen=_frozen_positions, __orig=_orig_build_positions,
+                                        __V=_V_h1):
+                    # Static buffer read for the h=1 inference geometry — no
+                    # allocation, runs inside the CUDA graph. int(H)/int(V) are
+                    # Python ints (callers pass H_obs as an int), so the branch is
+                    # a compile-time constant — no graph break.
+                    if __frozen is not None and int(H) == 1 and int(V) == __V:
+                        return __frozen
+                    return __orig(H, V, num_patches, num_prefix_visual, device)
+
+                rope_module.build_positions = _h1_build_positions  # type: ignore[assignment]
+                if hasattr(rope_module, "_disable_cache"):
+                    rope_module._disable_cache = True
+                else:
+                    setattr(rope_module, "_disable_cache", True)
+                _max_optimize_meta["rope_positions_prebaked_in_graph"] = bool(_frozen_positions is not None)
+                _max_optimize_meta["rope_cos_sin_cache_bypassed_in_graph"] = True
+                _max_optimize_meta["rope_positions_cache"] = True
+        except Exception as exc:  # noqa: BLE001
+            _max_optimize_meta["rope_positions_cache_error"] = str(exc)[:200]
+
+        # 1b) FULL inference prebake of the predictor's concat-mode dynamic
+        # builders, so NOTHING is constructed inside the captured graph:
+        #   - Force flex_attention OFF (return None) -> the dense additive mask
+        #     path is taken; flex BlockMask is a non-replayable object that
+        #     fragments the graph. For h=1 the dense mask is tiny (~595x595).
+        #   - Prebake the dense block-causal / concat mask once (eager) and patch
+        #     the builder to return that static buffer.
+        #   - Prebake the concat language RoPE positions once and patch.
+        # These depend only on (H=1, V, lang_len), so they are deterministic and
+        # safe to freeze for h=1 inference.
+        try:
+            if future_predictor is not None:
+                _V_h1 = len(rollout_camera_keys) if rollout_camera_keys else 2
+                _lang_len = int(getattr(future_predictor, "language_len", 0) or 0)
+                _use_lang = bool(getattr(future_predictor, "use_language", False))
+                _cmode = str(getattr(future_predictor, "condition_mode", ""))
+                _prepended = _lang_len if (_use_lang and _cmode == "concat") else 0
+                _pf: dict[str, Any] = {}
+
+                if hasattr(future_predictor, "_get_flex_block_mask"):
+                    future_predictor._get_flex_block_mask = (  # type: ignore[assignment]
+                        lambda H, V, device, lang_len=0: None
+                    )
+                    _pf["flex_off"] = True
+
+                try:
+                    if _prepended > 0 and hasattr(future_predictor, "_build_concat_dense_mask"):
+                        _orig_cdm = future_predictor._build_concat_dense_mask
+                        _frozen_dense = _orig_cdm(1, _V_h1, _prepended, device)
+
+                        def _frozen_concat_dense_mask(H, V, lang_len, device, *,
+                                                      __f=_frozen_dense, __o=_orig_cdm, __V=_V_h1, __L=_prepended):
+                            if int(H) == 1 and int(V) == __V and int(lang_len) == __L:
+                                return __f
+                            return __o(H, V, lang_len, device)
+                        future_predictor._build_concat_dense_mask = _frozen_concat_dense_mask  # type: ignore[assignment]
+                        _pf["concat_dense_mask"] = True
+                    if hasattr(future_predictor, "_build_dense_block_causal_mask"):
+                        _orig_dbcm = future_predictor._build_dense_block_causal_mask
+                        _frozen_bcm = _orig_dbcm(1, _V_h1, device)
+
+                        def _frozen_dense_block_causal_mask(H, V, device, *,
+                                                            __f=_frozen_bcm, __o=_orig_dbcm, __V=_V_h1):
+                            if int(H) == 1 and int(V) == __V:
+                                return __f
+                            return __o(H, V, device)
+                        future_predictor._build_dense_block_causal_mask = _frozen_dense_block_causal_mask  # type: ignore[assignment]
+                        _pf["dense_block_causal_mask"] = True
+                except Exception as exc:  # noqa: BLE001
+                    _pf["dense_mask_error"] = str(exc)[:160]
+
+                try:
+                    if _prepended > 0 and hasattr(future_predictor, "_build_concat_lang_positions"):
+                        _orig_clp = future_predictor._build_concat_lang_positions
+                        _frozen_lang_pos = _orig_clp(lang_len=_prepended, V=_V_h1, device=device)
+
+                        def _frozen_concat_lang_positions(lang_len, V, device, *,
+                                                          __f=_frozen_lang_pos, __o=_orig_clp, __V=_V_h1, __L=_prepended):
+                            if int(lang_len) == __L and int(V) == __V:
+                                return __f
+                            return __o(lang_len=lang_len, V=V, device=device)
+                        future_predictor._build_concat_lang_positions = _frozen_concat_lang_positions  # type: ignore[assignment]
+                        _pf["concat_lang_positions"] = True
+                except Exception as exc:  # noqa: BLE001
+                    _pf["lang_positions_error"] = str(exc)[:160]
+
+                _max_optimize_meta["predictor_inference_prebake"] = _pf
+        except Exception as exc:  # noqa: BLE001
+            _max_optimize_meta["predictor_prebake_error"] = str(exc)[:200]
+
+        # 2) bf16 weight cast on the predictor + DA3 backbone Linear/Conv/Embedding
+        # weights. LayerNorm / RoPE inv_freq / DPT depth-head stay fp32. The DA3
+        # patch_embed Conv2d is kept fp32 (it runs on the fp32 image tensor under
+        # autocast; a bf16 weight there raises "Input type float / bias bf16"
+        # inside torch.compile). Every deeper Linear already runs under bf16
+        # autocast, so casting its weights is numerically equivalent and halves
+        # resident weight memory. DA3_MAX_OPTIMIZE_NO_BF16=1 disables this block.
+        _bf16_disabled = os.environ.get("DA3_MAX_OPTIMIZE_NO_BF16") == "1"
+        if _bf16_disabled:
+            _max_optimize_meta["bf16_cast"] = False
+            _max_optimize_meta["bf16_cast_scope"] = "disabled_by_no_bf16_flag"
+        else:
+            try:
+                _cast_count, _skip_names = 0, []
+
+                def _bf16_eligible(module: Any, name: str) -> bool:
+                    low = name.lower()
+                    if any(tok in low for tok in ("dpt", "depth_head", "shallowrope", "rope", "layernorm")):
+                        return False
+                    return isinstance(module, (torch.nn.Linear, torch.nn.Conv2d, torch.nn.Embedding))
+
+                for mod_name, mod in future_predictor.named_modules():
+                    if _bf16_eligible(mod, mod_name):
+                        mod.to(torch.bfloat16)
+                        _cast_count += 1
+                    else:
+                        _skip_names.append(mod_name)
+
+                _bb_cast = 0
+
+                def _bf16_eligible_backbone(module: Any, name: str) -> bool:
+                    low = name.lower()
+                    if any(
+                        tok in low
+                        for tok in ("dpt", "depth_head", "shallowrope", "rope", "layernorm", "patch_embed", "norm")
+                    ):
+                        return False
+                    return isinstance(module, (torch.nn.Linear, torch.nn.Conv2d, torch.nn.Embedding))
+
+                _student_backbone = getattr(model, "student_da3", None)
+                if _student_backbone is not None:
+                    for mod_name, mod in _student_backbone.named_modules():
+                        if _bf16_eligible_backbone(mod, mod_name):
+                            mod.to(torch.bfloat16)
+                            _bb_cast += 1
+                _max_optimize_meta["bf16_cast"] = True
+                _max_optimize_meta["bf16_cast_scope"] = "predictor+backbone"
+                _max_optimize_meta["bf16_cast_modules"] = int(_cast_count)
+                _max_optimize_meta["bf16_cast_backbone_modules"] = int(_bb_cast)
+                _max_optimize_meta["bf16_skip_examples"] = _skip_names[:8]
+            except Exception as exc:  # noqa: BLE001
+                _max_optimize_meta["bf16_cast_error"] = str(exc)[:200]
+
+        # 3) DA3 backbone (dinov2) RoPE is also CUDA-graph-hostile in the deep
+        # stack: RotaryPositionEmbedding2D.forward does int(positions.max()) (a
+        # host sync) and caches cos/sin in a Python dict that lands in graph
+        # buffers. For h=1 the patch grid is tiny, so pin the table to a fixed
+        # large max_position (256 >> any patch index) and recompute cos/sin
+        # in-graph (no dict cache). RoPE outputs stay identical (embedding indexes
+        # by positions). Class-level, applied once, gated by max-optimize.
+        try:
+            import depth_anything_3.model.dinov2.layers.rope as _da3rope  # type: ignore
+            _R = getattr(_da3rope, "RotaryPositionEmbedding2D", None)
+            if _R is not None and not getattr(_R, "_max_opt_patched", False):
+                def _compute_freq_nocache(self, dim, seq_len, device, dtype):
+                    exponents = torch.arange(0, dim, 2, device=device).float() / dim
+                    inv_freq = 1.0 / (self.base_frequency ** exponents)
+                    pos = torch.arange(seq_len, device=device, dtype=inv_freq.dtype)
+                    angles = torch.einsum("i,j->ij", pos, inv_freq).to(dtype)
+                    angles = torch.cat((angles, angles), dim=-1)
+                    return angles.cos().to(dtype), angles.sin().to(dtype)
+
+                def _forward_fixed_maxpos(self, tokens, positions, *, __MP=256):
+                    feature_dim = tokens.size(-1) // 2
+                    cos_comp, sin_comp = self._compute_frequency_components(
+                        feature_dim, __MP, tokens.device, tokens.dtype
+                    )
+                    vf, hf = tokens.chunk(2, dim=-1)
+                    vf = self._apply_1d_rope(vf, positions[..., 0], cos_comp, sin_comp)
+                    hf = self._apply_1d_rope(hf, positions[..., 1], cos_comp, sin_comp)
+                    return torch.cat((vf, hf), dim=-1)
+
+                _R._compute_frequency_components = _compute_freq_nocache
+                _R.forward = _forward_fixed_maxpos
+                _R._max_opt_patched = True
+                _max_optimize_meta["da3_rope_fixed_maxpos"] = True
+        except Exception as exc:  # noqa: BLE001
+            _max_optimize_meta["da3_rope_patch_error"] = str(exc)[:200]
+
+        _inference_compile_info["max_optimize_meta"] = _max_optimize_meta
+
+    # Per-submodule torch.compile. Under max-optimize the predictor / propagate /
+    # action_head are FUSED below into a single graph, so skip their separate
+    # compile here (the `and not _fuse_h1` guard) — compiling them individually
+    # plus the clone wrappers between them fragments the graph and gives no
+    # speedup. The shallow encoder may still be compiled on its own if requested.
+    if _inference_compile_targets:
+        _compiled_labels: list[str] = []
+        if "predictor" in _inference_compile_targets and not _fuse_h1:
+            if future_predictor is not None:
+                future_predictor = _compile_for_inference(
+                    "future_predictor", future_predictor, _inference_compile_mode, _cudagraph_clone
+                )
+                _compiled_labels.append("predictor")
+            else:
+                print("[compile-inference] predictor: skipped (future_predictor not loaded)")
+        if "shallow" in _inference_compile_targets:
+            if hasattr(model.student_da3, "encode_shallow_visual_slots"):
+                model.student_da3.encode_shallow_visual_slots = _compile_for_inference(
+                    "student_da3.encode_shallow_visual_slots",
+                    model.student_da3.encode_shallow_visual_slots,
+                    _inference_compile_mode,
+                    _cudagraph_clone,
+                )
+                _compiled_labels.append("shallow")
+            else:
+                print("[compile-inference] shallow: skipped (encode_shallow_visual_slots missing)")
+        if "propagate" in _inference_compile_targets and not _fuse_h1:
+            if hasattr(model.student_da3, "propagate_shallow_with_actions"):
+                model.student_da3.propagate_shallow_with_actions = _compile_for_inference(
+                    "student_da3.propagate_shallow_with_actions",
+                    model.student_da3.propagate_shallow_with_actions,
+                    _inference_compile_mode,
+                    _cudagraph_clone,
+                )
+                _compiled_labels.append("propagate")
+            else:
+                print("[compile-inference] propagate: skipped (propagate_shallow_with_actions missing)")
+        if "action_head" in _inference_compile_targets and not _fuse_h1:
+            if getattr(model, "action_head", None) is not None:
+                model.action_head = _compile_for_inference(
+                    "action_head", model.action_head, _inference_compile_mode, _cudagraph_clone
+                )
+                _compiled_labels.append("action_head")
+            else:
+                print("[compile-inference] action_head: skipped (action_head missing)")
+        _inference_compile_info["targets"] = sorted(_inference_compile_targets)
+        _inference_compile_info["mode"] = _inference_compile_mode
+        _inference_compile_info["clone"] = bool(_cudagraph_clone)
+        _inference_compile_info["compiled"] = _compiled_labels
+
+    # Build the fused single-graph h=1 inference callable(s). One compiled
+    # callable runs predictor -> DA3 deep propagation -> action head (and,
+    # optionally, the frozen DA3 shallow encoder as its first stage) so CUDA
+    # graphs capture it as a single replay with no module-boundary breaks or
+    # clone wrappers. The .cpu()/normalizer steps stay outside (the caller does
+    # them). Returns raw (unnormalized) actions as a (1, 1, V, 7) float tensor,
+    # matching _action_head_chunks4d's output contract. These closures read
+    # `future_predictor` / `model.*` as free variables so they pick up the
+    # bf16-cast / prebaked modules above.
+    if _fuse_h1:
+        global _INFERENCE_CUDAGRAPH_ACTIVE
+        # The fused callables are bare torch.compile (not via
+        # _compile_for_inference), so flip the module-level CUDA-graph flag here
+        # too — call_policy emits cudagraph_mark_step_begin() per step when a
+        # CUDA-graph compile mode (reduce-overhead / max-autotune) is active.
+        if _inference_compile_mode in _CUDAGRAPH_COMPILE_MODES:
+            _INFERENCE_CUDAGRAPH_ACTIVE = True
+        _fuse_nv = len(rollout_camera_keys) if rollout_camera_keys else 2
+
+        def _fused_h1_core(visual_history, proprio_last, proprio_history,
+                           prev_action, lang_feats_in, lang_mask_in):
+            with torch.amp.autocast("cuda", dtype=torch.bfloat16, enabled=use_bf16):
+                pred = future_predictor(
+                    past_visual_tokens=visual_history,
+                    proprio=proprio_last,
+                    proprio_history=proprio_history,
+                    past_action_history=prev_action,
+                    lang_feats=lang_feats_in,
+                    lang_padding_mask=lang_mask_in,
+                )
+                pv = pred["predicted_next_visual_tokens"]
+                pa = pred["predicted_action_tokens"]
+                deep = model.student_da3.propagate_shallow_with_actions(
+                    pv, pa, decode_visuals=False,
+                )
+                at = deep["action_tokens"].reshape(1, 1, _fuse_nv, -1)
+                raw = model.action_head(at).float()
+            if raw.ndim == 3:
+                raw = raw.unsqueeze(2)
+            return raw
+
+        # Shallow-folded core. `images_norm_in` is the encoder-normalized image
+        # tensor with static shape (1, V, 3, H, W) for h=1 inference. The shallow
+        # encode runs DA3 blocks 0-12 (frozen, local attention) and returns
+        # tokens shaped (B, T=1, V, tokens, D), exactly the predictor's
+        # `past_visual_tokens` layout. The dinov2 RoPE + PositionGetter hazards
+        # are covered by the class-level RoPE monkeypatch above plus the
+        # position_getter prewarm below.
+        def _fused_h1_core_with_shallow(images_norm_in, proprio_last, proprio_history,
+                                        prev_action, lang_feats_in, lang_mask_in):
+            with torch.amp.autocast("cuda", dtype=torch.bfloat16, enabled=use_bf16):
+                shallow = model.student_da3.encode_shallow_visual_slots(
+                    images_norm_in,
+                    T=1,
+                    V=_fuse_nv,
+                )
+                visual_history = shallow["visual_tokens"]
+                pred = future_predictor(
+                    past_visual_tokens=visual_history,
+                    proprio=proprio_last,
+                    proprio_history=proprio_history,
+                    past_action_history=prev_action,
+                    lang_feats=lang_feats_in,
+                    lang_padding_mask=lang_mask_in,
+                )
+                pv = pred["predicted_next_visual_tokens"]
+                pa = pred["predicted_action_tokens"]
+                deep = model.student_da3.propagate_shallow_with_actions(
+                    pv, pa, decode_visuals=False,
+                )
+                at = deep["action_tokens"].reshape(1, 1, _fuse_nv, -1)
+                raw = model.action_head(at).float()
+            if raw.ndim == 3:
+                raw = raw.unsqueeze(2)
+            return raw
+
+        _mode = _inference_compile_mode
+
+        # Prewarm the dinov2 PositionGetter cache for the exact h=1 shallow
+        # geometry so the allocating cartesian_prod miss branch never runs inside
+        # the captured graph. patch grid = (image_size / patch_size).
+        try:
+            _trans = model.student_da3.backbone.pretrained
+            _pg = getattr(_trans, "position_getter", None)
+            if _pg is not None:
+                _ps = int(getattr(_trans, "patch_size", 14))
+                _h_px, _w_px = int(image_size[0]), int(image_size[1])
+                _ = _pg(1 * _fuse_nv, _h_px // _ps, _w_px // _ps, device=device)
+                _inference_compile_info.setdefault("max_optimize_meta", {})[
+                    "shallow_position_getter_prewarmed"
+                ] = True
+        except Exception as exc:  # noqa: BLE001
+            _inference_compile_info.setdefault("max_optimize_meta", {})[
+                "shallow_position_getter_prewarm_error"
+            ] = str(exc)[:160]
+
+        # CUDA-graph output aliasing: both fused callables are bare torch.compile
+        # (NO output-clone wrapper) so the CUDA-graph tree treats the call as a
+        # single replayable unit. The single (1,1,V,7) raw-action output is
+        # copied out with .cpu() IMMEDIATELY at the call site (in
+        # _generate_gam_chunks), before any subsequent graph replay can overwrite
+        # the static buffer, so aliasing is safe. DA3_CUDAGRAPH_CLONE=1 opts the
+        # shallow-folded graph into the clone wrapper as a fail-safe; it defaults
+        # OFF for the fused path to preserve the single-graph capture.
+        _wrap_graph_out = (
+            _mode in _CUDAGRAPH_COMPILE_MODES
+            and os.environ.get("DA3_CUDAGRAPH_CLONE", "0") == "1"
+        )
+
+        try:
+            fused_h1_inference = torch.compile(_fused_h1_core, mode=_mode, dynamic=False)
+            _inference_compile_info["fused_h1"] = True
+        except Exception as exc:  # noqa: BLE001
+            _inference_compile_info["fused_h1_error"] = str(exc)[:200]
+            fused_h1_inference = None
+
+        # DA3_FUSE_SHALLOW=1 (default) folds the shallow encoder into the graph;
+        # =0 keeps the predictor-only graph plus a separately-encoded shallow
+        # input (previous behavior) to isolate the fold's effect / drift.
+        _fuse_shallow_enabled = os.environ.get("DA3_FUSE_SHALLOW", "1") == "1"
+        if _fuse_shallow_enabled and hasattr(model.student_da3, "encode_shallow_visual_slots"):
+            try:
+                fused_h1_inference_with_shallow = torch.compile(
+                    _fused_h1_core_with_shallow, mode=_mode, dynamic=False
+                )
+                if _wrap_graph_out:
+                    fused_h1_inference_with_shallow = _CloneOutputModule(
+                        fused_h1_inference_with_shallow
+                    )
+                _inference_compile_info["fused_h1_with_shallow"] = True
+            except Exception as exc:  # noqa: BLE001
+                _inference_compile_info["fused_h1_with_shallow_error"] = str(exc)[:200]
+                fused_h1_inference_with_shallow = None
+        else:
+            _inference_compile_info["fused_h1_with_shallow"] = False
+            if not _fuse_shallow_enabled:
+                _inference_compile_info["fused_h1_with_shallow_skip"] = "DA3_FUSE_SHALLOW=0"
 
     def policy_text_prompt(task_desc: str) -> str:
         return normalize_text_prompt_for_policy(task_desc, text_prompt_normalization) or "perform the task"
@@ -2183,6 +2766,7 @@ def load_stage1_policy(
         decode_steps: int,
         execute_steps: int,
         decode_visuals: bool,
+        observed_images: torch.Tensor | None = None,
     ) -> dict[str, Any]:
         """Autoregressive gam rollout for a single policy call.
 
@@ -2211,6 +2795,67 @@ def load_stage1_policy(
         prev_action_chunk_history = observed_prev_action_chunks.detach().to(
             device=device, dtype=torch.float32
         )
+
+        # Fused single-CUDA-graph fast path (DA3_MAX_OPTIMIZE, decode_steps==1).
+        # When the shallow-folded graph is available AND the caller threaded the
+        # raw encoder-normalized images through (`observed_images`), run the WHOLE
+        # model — DA3 shallow encode (blocks 0-12) -> predictor -> DA3 deep
+        # propagation (blocks 13-39) -> action head — as ONE compiled callable.
+        # Otherwise fall back to the predictor-only fused graph that consumes the
+        # already-encoded shallow `observed_visual_tokens`. Either way the
+        # cpu()/normalizer steps stay outside the graph (done here). The fused
+        # callables are None unless DA3_MAX_OPTIMIZE=1, so this branch is a no-op
+        # on the default path.
+        _use_shallow_fold = (
+            fused_h1_inference_with_shallow is not None
+            and observed_images is not None
+            and int(decode_steps) == 1
+        )
+        if _use_shallow_fold:
+            _raw4d = fused_h1_inference_with_shallow(
+                observed_images,
+                proprio_history_tokens[:, -1, :],
+                proprio_history_tokens,
+                prev_action_chunk_history,
+                lang_feats,
+                lang_mask,
+            )
+        elif fused_h1_inference is not None and int(decode_steps) == 1:
+            _raw4d = fused_h1_inference(
+                visual_history_tokens,
+                proprio_history_tokens[:, -1, :],
+                proprio_history_tokens,
+                prev_action_chunk_history,
+                lang_feats,
+                lang_mask,
+            )
+        if _use_shallow_fold or (fused_h1_inference is not None and int(decode_steps) == 1):
+            # Copy the raw action out of the CUDA-graph static buffer IMMEDIATELY
+            # (.cpu()), before any subsequent replay can overwrite it. Then the
+            # normalizer/denorm steps run on CPU outside the graph, producing the
+            # exact ar_result dict shape the eager AR path returns for a
+            # single-decode-step h=1 call (generated_steps==1, execute_start==0).
+            _acnr = _raw4d[0].detach().cpu()
+            _acn = clamp_normalized_action_for_rollout(_acnr, normalizer)
+            _ac = normalizer.denormalize(
+                _acn.reshape(-1, _acn.shape[-1]), stats_key=chosen_stats_key,
+            ).reshape(_acn.shape)
+            _es = slice(execute_start, execute_start + 1)
+            return {
+                "action_chunks": _ac[_es].detach().cpu(),
+                "action_chunks_norm": _acn[_es].detach().cpu(),
+                "action_chunks_norm_raw": _acnr[_es].detach().cpu(),
+                "action_chunks_full": _ac.detach().cpu(),
+                "action_chunks_norm_full": _acn.detach().cpu(),
+                "action_chunks_norm_raw_full": _acnr.detach().cpu(),
+                "first_action_chunk_norm": _acn[execute_start:execute_start + 1].detach().cpu(),
+                "generated_steps": 1,
+                "execute_steps": 1,
+                "execute_start": int(execute_start),
+                "depth": None,
+                "depth_source": "unavailable",
+                "rgb": None,
+            }
 
         with torch.amp.autocast("cuda", dtype=torch.bfloat16, enabled=use_bf16):
             pred_out = future_predictor(
@@ -2470,8 +3115,59 @@ def load_stage1_policy(
                     # (prev_count); otherwise bootstrap from scratch.
                     _cache_valid = _persist_ok and _cache_shallow is not None and _cache_len == prev_count and prev_count > 0
                     _dbg = os.environ.get("DA3_DEBUG_CACHE") == "1"
+
+                    past_action_history = _build_observed_prev_action_history()
+                    # N_decode is the total DA3 deep-refine sequence length.
+                    # The first H_eff slots are the predictor outputs for the
+                    # real observed window, exactly as in training. The current
+                    # action is therefore slot H_eff - 1; any slots after that
+                    # are rollout-generated AR suffix.
+                    #
+                    # decode_steps is resolved BEFORE the shallow encode so the
+                    # shallow-fold decision (_will_fold) can SKIP the redundant
+                    # eager encode: the fused-with-shallow graph recomputes shallow
+                    # tokens from images_norm internally.
+                    _h_exec = int(getattr(policy, "active_action_horizon", action_steps) or action_steps)
+                    execute_steps = max(1, min(_h_exec, stage1_native_train_horizon))
+                    min_decode_steps = (H_eff - 1) + execute_steps
+                    if stage1_rollout_decode_horizon is None:
+                        decode_steps = min_decode_steps
+                    else:
+                        decode_steps = max(
+                            min_decode_steps,
+                            min(int(stage1_rollout_decode_horizon), stage1_native_train_horizon),
+                        )
+                    decode_steps = max(H_eff, min(int(stage1_native_train_horizon), int(decode_steps)))
+
+                    # Shallow-fold decision. When the shallow encoder is folded
+                    # into the single CUDA graph (h=1, decode_steps==1), the eager
+                    # encode below is REDUNDANT — the graph recomputes shallow
+                    # tokens from `images_norm` internally. Skipping the eager
+                    # encode here is the entire point of the fold: the ~11ms eager
+                    # shallow encode collapses into the captured graph. We still
+                    # pass a tiny placeholder so `_generate_gam_chunks` can read
+                    # H_obs (==H_eff==1) without an extra forward; the placeholder
+                    # is only consumed for its shape on the fold path. Folding is
+                    # never active unless DA3_MAX_OPTIMIZE built the fused graph,
+                    # so the default path always takes the eager-encode branches.
+                    _will_fold = (
+                        not _use_kv
+                        and fused_h1_inference_with_shallow is not None
+                        and int(decode_steps) == 1
+                        and int(H_eff) == 1
+                    )
                     _shallow_t0 = time.time()
-                    if _cache_valid:
+                    if _will_fold:
+                        full_visual_tokens = images_norm.new_zeros((1, H_eff, 1, 1, 1))
+                        warm_kvs = None
+                        warm_len = 0
+                        if _dbg:
+                            print(
+                                f"[SHALLOW FOLD] H_eff={H_eff} decode_steps={decode_steps} "
+                                f"-> eager shallow encode skipped (folded into graph)",
+                                flush=True,
+                            )
+                    elif _cache_valid:
                         # Encode only the current observation (last n_views in images_norm).
                         current_imgs_only = images_norm[:, -n_views:]
                         with torch.amp.autocast("cuda", dtype=torch.bfloat16, enabled=use_bf16):
@@ -2504,23 +3200,6 @@ def load_stage1_policy(
                             _sd = (time.time() - _shallow_t0) * 1000
                             print(f"[CACHE MISS] H_eff={H_eff} prev_count={prev_count} shallow={_sd:.1f}ms ({H_eff} ts) cache_len={_cache_len} cache_is_none={_cache_shallow is None}", flush=True)
 
-                    past_action_history = _build_observed_prev_action_history()
-                    # N_decode is the total DA3 deep-refine sequence length.
-                    # The first H_eff slots are the predictor outputs for the
-                    # real observed window, exactly as in training. The current
-                    # action is therefore slot H_eff - 1; any slots after that
-                    # are rollout-generated AR suffix.
-                    _h_exec = int(getattr(policy, "active_action_horizon", action_steps) or action_steps)
-                    execute_steps = max(1, min(_h_exec, stage1_native_train_horizon))
-                    min_decode_steps = (H_eff - 1) + execute_steps
-                    if stage1_rollout_decode_horizon is None:
-                        decode_steps = min_decode_steps
-                    else:
-                        decode_steps = max(
-                            min_decode_steps,
-                            min(int(stage1_rollout_decode_horizon), stage1_native_train_horizon),
-                        )
-                    decode_steps = max(H_eff, min(int(stage1_native_train_horizon), int(decode_steps)))
                     # KV cache is currently disabled above for train-equivalent
                     # prefix-head semantics.
                     _ar_fn = _generate_gam_chunks_kv if _use_kv else _generate_gam_chunks
@@ -2548,6 +3227,12 @@ def load_stage1_policy(
                             decode_steps=decode_steps,
                             execute_steps=execute_steps,
                             decode_visuals=decode_visuals,
+                            # Thread the encoder-normalized images so the AR
+                            # generator can run the shallow-folded single graph
+                            # (image -> shallow -> predictor -> deep -> action).
+                            # Only passed when the fold will apply; otherwise None
+                            # keeps the existing eager-tokens fast path.
+                            observed_images=images_norm if _will_fold else None,
                         )
                     # Publish timing for outer instrumentation.
                     if _dbg:
@@ -3489,6 +4174,40 @@ def load_stage1_policy(
         "ema": ema_meta,
         "config_source": config_source,
     }
+
+    # --- Inference-compile status (env-gated, default no-op) ----------------
+    # The actual torch.compile / DA3_MAX_OPTIMIZE fused-path wiring is done
+    # earlier (right after the predictor/text build) so the fused callables are
+    # visible to the AR generator + policy closures. Here we only surface the
+    # status that block accumulated in `_inference_compile_info` onto `info`.
+    # When DA3_MAX_OPTIMIZE is unset AND DA3_COMPILE_INFERENCE is unset/"none",
+    # `_inference_compile_info` is empty and nothing is added — behaviour is
+    # identical to the uncompiled path.
+    if _inference_compile_targets:
+        info["inference_compile_targets"] = _inference_compile_info.get(
+            "targets", sorted(_inference_compile_targets)
+        )
+        info["inference_compile_mode"] = _inference_compile_info.get(
+            "mode", _inference_compile_mode
+        )
+        info["inference_compile_clone"] = _inference_compile_info.get(
+            "clone", bool(_cudagraph_clone)
+        )
+        info["inference_compile_compiled"] = _inference_compile_info.get("compiled", [])
+        info["inference_cudagraph_active"] = bool(_INFERENCE_CUDAGRAPH_ACTIVE)
+    if max_optimize_active:
+        info["max_optimize"] = True
+        info["inference_compile_mode"] = _inference_compile_info.get(
+            "mode", info.get("inference_compile_mode", _inference_compile_mode)
+        )
+        info["inference_cudagraph_active"] = bool(_INFERENCE_CUDAGRAPH_ACTIVE)
+        if "max_optimize_meta" in _inference_compile_info:
+            info["max_optimize_meta"] = _inference_compile_info["max_optimize_meta"]
+        for _k in ("fused_h1", "fused_h1_error", "fused_h1_with_shallow",
+                   "fused_h1_with_shallow_error", "fused_h1_with_shallow_skip"):
+            if _k in _inference_compile_info:
+                info[_k] = _inference_compile_info[_k]
+
     return policy, info
 
 
@@ -3652,6 +4371,23 @@ def apply_action_repeat_mode(env_action: np.ndarray, action_repeat: int, mode: s
 
 
 def call_policy(policy: Callable[..., torch.Tensor], obs: dict[str, Any], task_desc: str) -> torch.Tensor:
+    # CUDA-graph step boundary. When inference modules are compiled with a
+    # CUDA-graph mode (reduce-overhead / max-autotune), the graphs reuse static
+    # output buffers across replays. Without an explicit step marker, chaining
+    # several compiled modules within one policy call (encode_shallow ->
+    # predictor -> propagate -> action_head) raises "accessing tensor output of
+    # CUDAGraphs that has been overwritten by a subsequent run".
+    # cudagraph_mark_step_begin() tells the CUDA-graph trees that a new
+    # inference step is starting so prior-step output buffers are safe to
+    # reuse. Gated on the module-level flag, so this is a pure no-op on the
+    # default (DA3_COMPILE_INFERENCE unset/none) path.
+    if _INFERENCE_CUDAGRAPH_ACTIVE and hasattr(torch, "compiler") and hasattr(
+        torch.compiler, "cudagraph_mark_step_begin"
+    ):
+        try:
+            torch.compiler.cudagraph_mark_step_begin()
+        except Exception:  # noqa: BLE001
+            pass
     if bool(getattr(policy, "accepts_task_desc", False)):
         out = policy(obs, task_desc=task_desc)
     else:

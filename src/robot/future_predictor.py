@@ -1929,10 +1929,11 @@ def build_future_predictor(cfg: dict, sigreg: Optional[nn.Module] = None) -> nn.
     Only `predictor.type: gam` (or synonyms) is supported. Legacy v1 /
     v2 / level0 / block12_ar aliases still select gam — legacy config
     keys like `action_seed_mode` / `use_action_history` are explicitly rejected
-    to surface stale configs.
+    to surface stale configs. `shallow12_ar` is the pre-rename name of `gam`
+    and is accepted so checkpoints saved before the rename still load.
     """
     pred_type = str(cfg.get("type", cfg.get("architecture", "gam"))).lower()
-    allowed = {"gam", "gam", "block12_ar"}
+    allowed = {"gam", "shallow12_ar", "block12_ar"}
     legacy_aliases = {"level0", "v1", "v2"}
     if pred_type in legacy_aliases:
         raise ValueError(
