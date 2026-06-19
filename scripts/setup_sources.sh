@@ -27,11 +27,20 @@ else
   echo "[setup_sources] Depth-Anything-3 already present, skipping."
 fi
 
-# ---- LIBERO benchmark: install --no-deps (its requirements.txt pins conflicting versions) ----
+# ---- LIBERO benchmark: used via PYTHONPATH only (NOT pip-installed) ----
+# Put the LIBERO repo ROOT on PYTHONPATH so `import libero.libero.*` resolves.
+# Do NOT add LIBERO/libero (it is a namespace package; adding it makes `import
+# libero` bind to the inner LIBERO/libero/libero and breaks `import libero.libero`).
+# LIBERO's requirements.txt is ignored (pins old, conflicting versions); its env
+# classes' runtime deps (bddl, easydict, future) come from requirements.txt.
 if [ ! -d LIBERO/libero ]; then
   git clone https://github.com/Lifelong-Robot-Learning/LIBERO.git LIBERO
 fi
-pip install --no-deps -e LIBERO
+
+# robosuite pulls non-headless opencv-python (needs libGL). Force a clean
+# headless-only cv2 so eval rendering works on a headless server.
+pip uninstall -y opencv-python opencv-python-headless >/dev/null 2>&1 || true
+pip install --no-deps "opencv-python-headless==4.11.0.86" >/dev/null 2>&1 || true
 
 # ---- LIBERO-Plus: optional, only for `--plus` perturbed-task eval ----
 if [ ! -d LIBERO-plus/libero ]; then
@@ -47,6 +56,6 @@ cat <<EOF
   export DA3_ROOT="$ROOT"
   export DA3_LIBERO_SOURCE_DIR="$ROOT/LIBERO"
   export DA3_LIBERO_PLUS_DIR="$ROOT/LIBERO-plus"
-  export PYTHONPATH="$ROOT/src:$ROOT/LIBERO:$ROOT/LIBERO/libero:\${PYTHONPATH:-}"
+  export PYTHONPATH="$ROOT/src:$ROOT/LIBERO:\${PYTHONPATH:-}"   # NOT \$ROOT/LIBERO/libero
   export MUJOCO_GL=egl PYOPENGL_PLATFORM=egl
 EOF

@@ -85,7 +85,7 @@ Then per shell:
 ```bash
 export DA3_ROOT=/path/to/your/data_root  # configs resolve all data/ckpt paths under ${DA3_ROOT}
 export DA3_LIBERO_SOURCE_DIR=$DA3_ROOT/LIBERO
-export PYTHONPATH=$DA3_ROOT/src:$DA3_LIBERO_SOURCE_DIR:$DA3_LIBERO_SOURCE_DIR/libero:$PYTHONPATH
+export PYTHONPATH=$DA3_ROOT/src:$DA3_LIBERO_SOURCE_DIR:$PYTHONPATH   # LIBERO repo root only — NOT .../LIBERO/libero
 export MUJOCO_GL=egl PYOPENGL_PLATFORM=egl    # osmesa for software rendering
 export WANDB_API_KEY=...                       # optional; only with --wandb
 ```

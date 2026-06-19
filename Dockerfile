@@ -33,7 +33,11 @@ WORKDIR /workspace/da3-libero
 # ---- Python deps (pinned). torch (2.5.1) already in the base image satisfies
 #      `torch>=2.5`, so pip does not reinstall it. -------------------------------
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt \
+    # robosuite pulls non-headless opencv-python (needs libGL); both opencv pkgs
+    # share the cv2/ dir, so force a clean headless-only cv2 for robust headless use.
+    && pip uninstall -y opencv-python opencv-python-headless \
+    && pip install --no-cache-dir --no-deps opencv-python-headless==4.11.0.86
 
 # ---- DA3 backbone --------------------------------------------------------------
 # da3_giant_encoder.py adds  $DA3_ROOT/Depth-Anything-3/src  to sys.path, so the
@@ -44,12 +48,13 @@ RUN git clone https://github.com/ByteDance-Seed/Depth-Anything-3.git Depth-Anyth
     && git -C Depth-Anything-3 checkout ${DA3_BACKBONE_COMMIT}
 
 # ---- LIBERO benchmark ----------------------------------------------------------
-# Installed with --no-deps: LIBERO's own requirements.txt pins old, conflicting
-# versions (numpy 1.22, transformers 4.21, gym 0.25, robosuite 1.4.0). The
-# runtime deps its env classes actually need (bddl, easydict, future) are pinned
-# in requirements.txt at the validated versions.
-RUN git clone https://github.com/Lifelong-Robot-Learning/LIBERO.git /opt/LIBERO \
-    && pip install --no-cache-dir --no-deps -e /opt/LIBERO
+# Used via PYTHONPATH (NOT pip-installed): put the LIBERO repo root on PYTHONPATH
+# so `import libero.libero.*` resolves (LIBERO/libero is a namespace package, so
+# adding LIBERO/libero itself would break the import — only the repo root goes on
+# the path). LIBERO's own requirements.txt is ignored (it pins old, conflicting
+# numpy/transformers/gym); the runtime deps its env classes need (bddl, easydict,
+# future) are pinned in requirements.txt.
+RUN git clone https://github.com/Lifelong-Robot-Learning/LIBERO.git /opt/LIBERO
 
 # ---- LIBERO-Plus (optional: needed only for `--plus` perturbed-task eval) ------
 ARG LIBERO_PLUS_COMMIT=4976dc30028e805ff8094b55501d532c48fec182
@@ -66,7 +71,7 @@ ENV MUJOCO_GL=egl \
     DA3_ROOT=/workspace/da3-libero \
     DA3_LIBERO_SOURCE_DIR=/opt/LIBERO \
     DA3_LIBERO_PLUS_DIR=/opt/LIBERO-plus \
-    PYTHONPATH=/workspace/da3-libero/src:/opt/LIBERO:/opt/LIBERO/libero \
+    PYTHONPATH=/workspace/da3-libero/src:/opt/LIBERO \
     PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 # Datasets + base weights are NOT bundled — mount/download under $DA3_ROOT:

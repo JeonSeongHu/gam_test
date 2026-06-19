@@ -46,6 +46,11 @@ h5py==3.16.0
 omegaconf==2.3.0
 antlr4-python3-runtime==4.9.3
 pillow==11.2.1
+# NOTE: robosuite (below) also pulls non-headless opencv-python (needs a system
+# libGL). On a headless server, force headless cv2 after install (Docker /
+# scripts/setup_sources.sh do this):
+#   pip uninstall -y opencv-python opencv-python-headless && \
+#   pip install --no-deps opencv-python-headless==4.11.0.86
 opencv-python-headless==4.11.0.86
 imageio==2.37.3
 imageio-ffmpeg==0.6.0
