@@ -135,8 +135,8 @@ training:
       libero_10: 520
 dataset:
   type: libero_hdf5
-  hdf5_root: ${oc.env:DA3_ROOT,.}/data/libero_hdf5/yifengzhu-hf/LIBERO-datasets
-  stats_dir: ${oc.env:DA3_ROOT,.}/data/libero_hdf5/_stats
+  hdf5_root: ${oc.env:DA3_ROOT,.}/data/libero_noop
+  stats_dir: ${oc.env:DA3_ROOT,.}/data/libero_noop/_stats
   image_size:
   - 224
   - 224
@@ -149,12 +149,9 @@ dataset:
   source_fps: 20
   da3_input_rotate180: true
   da3_input_vflip: false
-  gt_depth_root: ${oc.env:DA3_ROOT,.}/gt_depth/libero_aligned_hide_sites_fast
-  gt_depth_rotate180: true
-  gt_depth_vflip: false
+  # GT depth is read from the embedded LIBERO HDF5 (obs/agentview_depth + obs/eye_in_hand_depth); no external sidecar.
+  gt_depth_root: null
   gt_depth_require_geometry: true
-  gt_depth_scale_mode: pointmap
-  gt_depth_min_meters: 0.001
   action_stats_samples: 10000
   proprio_stats_samples: 10000
   camera_keys:

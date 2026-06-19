@@ -30,3 +30,14 @@ PLAN_world_model_robot_action.md
 .torch_ext_*
 .codex
 .claude/env/*.local.env
+
+# data / weights symlinked in for local runs (never commit)
+data/
+gt_depth/
+*.pt
+Depth-Anything-3/
+LIBERO/
+.local/
+Depth-Anything-3
+LIBERO
+LIBERO-plus

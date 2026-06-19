@@ -1,31 +1,78 @@
-# Core training + inference deps for DA3-Giant gam LIBERO / LIBERO-Plus.
-# Versions mirror the validated environment in requirements-cscs.lock; pins are
-# loosened here for portability. For an exact reproduction use requirements-cscs.lock.
+# =============================================================================
+# DA3-Giant `gam` — LIBERO / LIBERO-Plus (training + closed-loop inference)
 #
-# NOTE: torch is intentionally unpinned — install the build matching your CUDA /
-# platform (CSCS used a torch 2.8 aarch64/GH200 wheel). torch >= 2.4 is required
-# for flex_attention / BlockMask used by the predictor.
+# Pins below are the EXACT versions of the validated environment (CSCS GH200,
+# Python 3.12). They are all public / pip-installable. Reproduce with either:
+#   - Docker:  docker build -t da3-libero .        (recommended — see Dockerfile)
+#   - conda :  conda env create -f environment.yml
+#   - venv  :  python3.12 -m venv .venv && . .venv/bin/activate &&
+#              pip install -r requirements.txt
+#
+# Two install steps are NOT covered by this file (done by the Dockerfile, or
+# follow the README):
+#   1) torch / torchvision — install the build matching your CUDA/platform FIRST
+#      (see note below). Everything here is compatible with torch >= 2.5.
+#   2) The LIBERO benchmark + the DA3 backbone — installed from source; see README
+#      / Dockerfile. IMPORTANT: install LIBERO with `--no-deps` (its own
+#      requirements.txt pins old, conflicting versions of numpy/transformers/gym).
+# =============================================================================
 
-torch>=2.4
-deepspeed==0.18.8
+# ---- torch ------------------------------------------------------------------
+# Validated on a torch 2.8 GH200 build; public-compatible with torch >= 2.5
+# (needed for torch.nn.attention.flex_attention / BlockMask in the predictor;
+# a dense-mask fallback exists for older torch but is untested here).
+# Install the wheel for YOUR platform BEFORE the rest, e.g.:
+#   pip install torch==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cu124
+# The Dockerfile uses the pytorch/pytorch:2.5.1-cuda12.4 base, so torch is
+# already present there and is intentionally not re-pinned in this file.
+torch>=2.5
+torchvision
+
+# ---- core deep-learning stack ----------------------------------------------
 transformers==5.5.4
-timm==1.0.26
-omegaconf==2.3.0
-einops==0.8.1
+tokenizers==0.22.2
+huggingface_hub==1.10.1
 safetensors==0.5.3
+accelerate==1.13.0
+datasets==4.8.4
+timm==1.0.26
+einops==0.8.1
+deepspeed==0.18.8
+
+# ---- numerics / config / IO ------------------------------------------------
 numpy==1.26.4
-pillow==11.2.1
-imageio==2.37.3
-opencv-python
+scipy==1.15.3
 h5py==3.16.0
+omegaconf==2.3.0
+antlr4-python3-runtime==4.9.3
+pillow==11.2.1
+opencv-python-headless==4.11.0.86
+imageio==2.37.3
+imageio-ffmpeg==0.6.0
+av==15.1.0
+matplotlib==3.10.3
+moviepy==1.0.3
+plotly==5.24.1
+tqdm==4.67.1
+protobuf==4.24.4
 wandb==0.24.2
 
-# LIBERO HDF5 demos are read with h5py (above). Training is LIBERO-only.
+# ---- closed-loop simulator eval (LIBERO + LIBERO-Plus) ----------------------
+# MuJoCo + robosuite + gymnasium drive the LIBERO rollout. robosuite 1.4.1 is
+# the version LIBERO targets; do NOT bump to 1.5.x. numba/llvmlite back
+# robosuite's controller math; PyOpenGL provides the EGL bindings for headless
+# rendering (set MUJOCO_GL=egl).
+mujoco==3.6.0
+robosuite==1.4.1
+gymnasium==1.2.3
+cloudpickle==3.1.1
+Farama-Notifications==0.0.4
+numba==0.60.0
+llvmlite==0.43.0
+PyOpenGL==3.1.10
 
-# Closed-loop simulator eval (LIBERO + LIBERO-Plus). The LIBERO benchmark package +
-# assets install from source: https://github.com/Lifelong-Robot-Learning/LIBERO
-# LIBERO-Plus perturbed-task benchmark installs from its own source (sylvestf/LIBERO-plus).
-robosuite==1.5.1
-mujoco
-
-# DA3 backbone: see Depth-Anything-3/ (install its own requirements).
+# ---- LIBERO benchmark python deps (the LIBERO package itself is source-installed
+#      with --no-deps; these are the only runtime deps its env classes need) ----
+bddl==3.6.0
+easydict==1.13
+future==1.0.0

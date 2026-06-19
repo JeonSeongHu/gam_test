@@ -1,3 +1,15 @@
+# =============================================================================
+# REFERENCE FREEZE of the exact validated environment (CSCS GH200, Python 3.12,
+# full `pip freeze` of all installed packages).
+#
+# DO NOT `pip install -r` this file. Several entries are `@ file:///rapids/...`
+# / `@ file:///opt/pytorch/...` wheels baked into the NVIDIA container image
+# (torch, apex, cudf, cupy, ...) and are NOT downloadable on a public machine.
+# It is kept only to document exact transitive versions.
+#
+# To reproduce a WORKING environment use requirements.txt (curated, pinned, all
+# public) + the Dockerfile / environment.yml. See README.
+# =============================================================================
 absl-py==2.3.0
 accelerate==1.13.0
 aiohappyeyeballs @ file:///rapids/aiohappyeyeballs-2.6.1-py3-none-any.whl#sha256=f349ba8f4b75cb25c99c5c2d84e997e485204d2902a9597802b0371f09331fb8

@@ -44,48 +44,69 @@ Losses (compute_gam_forward_loss): action L1 + future-feature distillation
 
 ## Setup
 
-```bash
-pip install -r requirements.txt          # see requirements-cscs.lock for the exact pinned env
-# DA3 backbone source: clone the Depth-Anything-3 repo into ./Depth-Anything-3 so that
-# ./Depth-Anything-3/src/depth_anything_3 is importable (da3_giant_encoder adds it to sys.path),
-# then install its requirements.
-export PYTHONPATH=src:$PYTHONPATH
-export DA3_ROOT=/path/to/your/data_root  # all data/checkpoint paths in configs resolve under ${DA3_ROOT}
-export WANDB_API_KEY=...                  # optional; only if --wandb is used
-```
+Reproducible from scratch — pick **one** of the three. All install the identical
+pinned package set (see `requirements.txt`). The validated reference environment is
+Python 3.12 + a torch 2.8 GH200 build; the pins are public and work on torch ≥ 2.5.
 
-All machine-specific paths in the configs are written as `${oc.env:DA3_ROOT,.}/...`
-(OmegaConf env resolution). Lay out your data/checkpoints under `$DA3_ROOT`:
-
-```
-$DA3_ROOT/
-  checkpoints/track4world_da3.pth                  # DA3-Giant base weights (stage_1.ckpt_path)
-  data/libero_hdf5/yifengzhu-hf/LIBERO-datasets/   # LIBERO HDF5 demos (training)
-  gt_depth/...                                     # optional aligned GT-depth sidecars (gt_depth_root)
-```
-
-### Environment (conda or docker)
-Reproducible environments are provided; pick one.
+### Option A — Docker (recommended; fully self-contained)
+Installs the pinned Python stack, the DA3 backbone, LIBERO, LIBERO-Plus, and the
+headless-MuJoCo GL/EGL system libraries — nothing else to clone.
 
 ```bash
-# Option A — conda
-conda env create -f environment.yml && conda activate da3-libero
-
-# Option B — docker (CUDA + headless MuJoCo/EGL preinstalled)
 docker build -t da3-libero .
-docker run --gpus all -it --rm -e DA3_ROOT=/data -v /host/data_root:/data \
+docker run --gpus all -it --rm \
+  -e DA3_ROOT=/data -v /host/data_root:/data \    # mount data + weights (below)
   -e WANDB_API_KEY=$WANDB_API_KEY da3-libero
 ```
 
-`requirements.txt` is the portable dependency list; `requirements-cscs.lock` is the
-exact pin set validated on the original cluster (GH200/aarch64, torch 2.8). Closed-loop
-eval renders MuJoCo headlessly — set `MUJOCO_GL=egl` (NVIDIA driver) or `osmesa` (software);
-the Docker image installs the needed GL/EGL libraries.
+### Option B — conda
+```bash
+conda env create -f environment.yml && conda activate da3-libero
+bash scripts/setup_sources.sh          # clone + install DA3 backbone, LIBERO, LIBERO-Plus
+```
 
-### Data & weights (download separately)
-- **DA3-Giant base weights** `track4world_da3.pth` — the DA3-Giant initialization the encoder fine-tunes from. Obtain from the Depth-Anything-3 release.
-- **LIBERO (training + eval)** — HDF5 demos from `yifengzhu-hf/LIBERO-datasets` (HuggingFace) for training; plus the `libero` simulator/assets (`robosuite` + `LIBERO`) for closed-loop eval.
-- **LIBERO-Plus (eval only)** — the perturbed-task benchmark, installed from source (`sylvestf/LIBERO-plus`). Used for closed-loop eval via `eval_libero_unified.py --plus` (simulator rollout). It is **not** a training dataset.
+### Option C — venv + pip
+```bash
+python3.12 -m venv .venv && source .venv/bin/activate
+pip install torch==2.5.1 torchvision --index-url https://download.pytorch.org/whl/cu124
+pip install -r requirements.txt
+bash scripts/setup_sources.sh
+# system GL libs for headless rendering (Debian/Ubuntu):
+#   sudo apt-get install libgl1 libglvnd0 libegl1 libgles2 libosmesa6 libglfw3 ffmpeg
+```
+
+`scripts/setup_sources.sh` clones the **DA3 backbone** (`ByteDance-Seed/Depth-Anything-3`,
+present-on-disk only — `da3_giant_encoder` adds `Depth-Anything-3/src` to `sys.path`),
+the **LIBERO** benchmark (installed `--no-deps` — LIBERO's own `requirements.txt` pins
+old, conflicting versions of numpy/transformers/gym), and **LIBERO-Plus** (eval only).
+Commits are pinned in the script / Dockerfile.
+
+Then per shell:
+```bash
+export DA3_ROOT=/path/to/your/data_root  # configs resolve all data/ckpt paths under ${DA3_ROOT}
+export DA3_LIBERO_SOURCE_DIR=$DA3_ROOT/LIBERO
+export PYTHONPATH=$DA3_ROOT/src:$DA3_LIBERO_SOURCE_DIR:$DA3_LIBERO_SOURCE_DIR/libero:$PYTHONPATH
+export MUJOCO_GL=egl PYOPENGL_PLATFORM=egl    # osmesa for software rendering
+export WANDB_API_KEY=...                       # optional; only with --wandb
+```
+
+`requirements.txt` is the curated, public, pinned list (the install target).
+`requirements-cscs.lock` is a reference freeze of the exact validated cluster env and is
+**not** directly installable (it points at NVIDIA-container-internal wheels).
+
+### Data & weights (download separately, lay out under `$DA3_ROOT`)
+All machine-specific paths in the configs are `${oc.env:DA3_ROOT,.}/...` (OmegaConf):
+
+```
+$DA3_ROOT/
+  checkpoints/track4world_da3.pth        # DA3-Giant base weights (stage_1.ckpt_path)
+  data/libero_noop/<suite>/*.hdf5        # LIBERO HDF5 demos (libero_spatial/object/goal/10)
+  data/libero_noop/_stats/               # action/proprio normalizer stats (auto-computed if absent)
+```
+
+- **DA3-Giant base weights** `track4world_da3.pth` — DA3-Giant initialization the encoder fine-tunes from; from the Depth-Anything-3 release.
+- **LIBERO HDF5 demos** — the replayed no-op LIBERO HDF5s. **GT depth is embedded inside these HDF5s** (`obs/agentview_depth`, `obs/eye_in_hand_depth`); configs set `gt_depth_root: null` and the loader reads depth directly from the HDF5 — there is **no external depth sidecar**.
+- **LIBERO-Plus (eval only)** — perturbed-task benchmark from source (`sylvestf/LIBERO-plus`), used by `eval_libero_unified.py --plus` (simulator rollout). Not a training dataset.
 
 ## Train
 
