@@ -1530,10 +1530,18 @@ def run_da3_finetune_training(args, cfg):
             )
 
     # --- torch.compile ---
+    # DA3_TRAIN_COMPILE_MODE selects the inductor mode (default unchanged).
+    # "reduce-overhead" / "max-autotune" enable CUDA graphs (fwd+bwd) for
+    # training; the RoPE/graph-stability work that makes this safe is shared
+    # with the inference fast path. Default is the historical mode=default.
     if use_compile:
+        _train_compile_mode = os.environ.get("DA3_TRAIN_COMPILE_MODE", "default").strip().lower()
         if rank == 0:
-            logger.info("Compiling model with torch.compile (mode=default)...")
-        finetune_model = torch.compile(finetune_model)
+            logger.info("Compiling model with torch.compile (mode=%s)...", _train_compile_mode)
+        if _train_compile_mode in ("", "default"):
+            finetune_model = torch.compile(finetune_model)
+        else:
+            finetune_model = torch.compile(finetune_model, mode=_train_compile_mode)
 
     max_steps = int(training_cfg.get("max_steps", 100000))
 
