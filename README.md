@@ -254,6 +254,260 @@ deepspeed --include localhost:0,1,2,3 src/train_robot.py \
 
 In-training closed-loop eval is configured through `training.closed_loop_evals`.
 
+### Training Config Reference
+
+`src/train_robot.py` reads an OmegaConf YAML and accepts `--set key=value`
+overrides. The main GAM config is
+`configs/training/libero_unified/gam/chunk8_150k_2node.yaml`.
+
+| YAML key | Meaning |
+|----------|---------|
+| `stage_1.ckpt_path` | DA3-Giant base checkpoint loaded before robot fine-tuning |
+| `da3_finetune.enabled` | Enables the DA3-Giant GAM fine-tuning path |
+| `da3_finetune.freeze_blocks_before` | Freezes DA3 blocks before this index, with GAM using blocks 0-12 as the geometric encoder |
+| `da3_finetune.n_action_steps` | Number of low-level actions represented by one GAM action token sequence |
+| `da3_finetune.n_views` | Number of camera views per timestep |
+| `action_head.chunk_size` | Low-level actions predicted per action-head token |
+| `action_head.n_dims` | Action dimensionality, 7 for LIBERO delta actions |
+| `predictor.enabled` | Enables `GAMFuturePredictor` |
+| `predictor.type` | Must be `gam` for this release |
+| `predictor.H_choices` | Observed history lengths sampled during training |
+| `predictor.H_weights` | Sampling weights for `H_choices` |
+| `predictor.lambda_feat_future` | Future latent feature distillation weight |
+| `predictor.lambda_sigreg` | SIGReg regularization weight |
+| `regularization.lambda_depth` | DA3 depth decode loss weight |
+| `training.global_batch_size` | Target global batch size across data-parallel ranks |
+| `training.micro_batch_size` | Per-GPU batch before gradient accumulation |
+| `training.grad_accum_steps` | Gradient accumulation factor |
+| `training.base_lr` | DA3 backbone base learning rate |
+| `training.head_lr_mult` | Multiplier for the action head learning rate |
+| `training.predictor_lr_mult` | Multiplier for the GAM predictor learning rate |
+| `training.max_steps` | Total optimizer steps |
+| `training.ckpt_every` | Checkpoint save interval in steps |
+| `training.vis_every` | Visualization interval in steps |
+| `training.bf16` | Uses bf16 autocast for training |
+| `training.compile` | Enables `torch.compile` for the training model |
+| `dataset.hdf5_root` | LIBERO HDF5 root |
+| `dataset.stats_dir` | Action and proprioception stats root |
+| `dataset.future_steps` | Future action/observation horizon in dataset samples |
+| `dataset.chunk_size` | Low-level action chunk length from the dataset |
+| `dataset.camera_keys` | Camera keys read from HDF5 |
+| `dataset.da3_input_rotate180` | Applies the train-time DA3 image rotation convention |
+| `dataset.gt_depth_root` | `null` means depth is read from embedded HDF5 keys |
+
+Training CLI flags:
+
+| Flag | Meaning |
+|------|---------|
+| `--config` | YAML config path |
+| `--results-dir` | Output root for checkpoints, logs, and visualizations |
+| `--ckpt` | Resume checkpoint |
+| `--single-gpu` | Run one local GPU process |
+| `--wandb` | Enable W&B logging |
+| `--wandb-name` | W&B run display name |
+| `--wandb-project` | W&B project override |
+| `--wandb-new-run` | Start a fresh W&B run during resume |
+| `--wandb-resume-from` | Rewind W&B resume point, for example `<run_id>?_step=72000` |
+| `--reset-schedule` | Reset optimizer and LR scheduler on resume |
+| `--reset-optimizer-state` | Load model weights while starting optimizer, scheduler, and scaler fresh |
+| `--refresh-action-stats` | Reload normalizers from `dataset.stats_dir` during resume |
+| `--eval-only` | Load checkpoint, run configured eval split, then exit |
+| `--eval-max-batches` | Cap eval batches per rank for `--eval-only` |
+| `--ddp-timeout-minutes` | Distributed process group timeout |
+| `--set key=value` | Override YAML keys with OmegaConf dotlist syntax |
+| `--deepspeed_config` | DeepSpeed config path, added by DeepSpeed |
+
+Training compile controls:
+
+| Setting | Meaning |
+|---------|---------|
+| `training.compile=true` | Calls `torch.compile` around the training model |
+| `DA3_TRAIN_COMPILE_MODE=default` | Standard training compile mode |
+| `training.compile=false` | Public configs use eager training by default |
+
+DeepSpeed ZeRO-2 is selected by the JSON passed to `--deepspeed_config`.
+`configs/training/libero_unified/deepspeed/micro2.json` sets:
+
+| JSON key | Meaning |
+|----------|---------|
+| `train_micro_batch_size_per_gpu` | Per-GPU micro batch seen by DeepSpeed |
+| `gradient_accumulation_steps` | DeepSpeed accumulation factor |
+| `zero_optimization.stage` | ZeRO stage, `2` for optimizer-state sharding |
+| `bf16.enabled` | bf16 training |
+| `optimizer.type` | AdamW |
+| `optimizer.params.lr` | Base optimizer LR, overridden by train param groups |
+| `gradient_clipping` | Global grad clipping value |
+
+Example resume with a fresh optimizer:
+
+```bash
+PYTHONPATH=src:$PYTHONPATH \
+PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
+deepspeed --include localhost:0,1,2,3 src/train_robot.py \
+  --config configs/training/libero_unified/gam/chunk8_150k_2node.yaml \
+  --deepspeed_config configs/training/libero_unified/deepspeed/micro2.json \
+  --ckpt /path/to/checkpoint.pt \
+  --reset-optimizer-state \
+  --wandb \
+  --wandb-name gam_resume_fresh_optimizer
+```
+
+### In-Training Closed-Loop Eval
+
+Closed-loop eval during training is configured in YAML with
+`training.closed_loop_evals`. Each entry is a rollout profile consumed by
+`src/robot/closed_loop_libero_eval.py`.
+
+```yaml
+training:
+  closed_loop_evals:
+    - name: plus_spatial_smoke
+      benchmark: libero_plus
+      suites: [libero_spatial]
+      num_trials_per_task: 1
+      max_tasks_per_suite: 4
+      every_steps: 2000
+      plus_official_category: camera
+      libero_plus_robot_init_qpos_mode: original
+      action_horizon: 1
+      rollout_decode_horizon: 1
+      action_repeat: 1
+      action_repeat_mode: split_delta
+      camera_size: 256
+      env_process_isolation: true
+```
+
+| Profile key | Meaning |
+|-------------|---------|
+| `name` | Label used in logs and W&B metrics |
+| `benchmark` | `libero` or `libero_plus` |
+| `suites` | Suite list such as `libero_spatial`, `libero_object`, `libero_goal`, `libero_10` |
+| `num_trials_per_task` | Rollout trials per task |
+| `max_tasks_per_suite` | Optional task cap for smoke profiles |
+| `every_steps` | Training step interval |
+| `plus_official_category` | LIBERO-Plus category filter |
+| `libero_plus_robot_init_qpos_mode` | Use `original` for official LIBERO-Plus qpos |
+| `action_horizon` | GAM model-step chunks executed per policy call |
+| `rollout_decode_horizon` | GAM AR model steps decoded before action selection |
+| `action_repeat` | Env steps per predicted action |
+| `action_repeat_mode` | `split_delta` divides motion deltas across repeats |
+| `camera_size` | Simulator render resolution |
+| `env_process_isolation` | Runs each env inside a child process |
+
+## Evaluation Config Reference
+
+Standalone rollout eval uses `src/eval_libero_unified.py`.
+
+| Flag | Meaning |
+|------|---------|
+| `--ckpt` | Stage 1 GAM checkpoint |
+| `--config` | Training YAML used to rebuild model architecture |
+| `--use-ema` | Load EMA weights saved in the checkpoint |
+| `--suites` | Comma-separated suite list |
+| `--task-ids` | Comma-separated task ids within each suite |
+| `--num-trials-per-task` | Trials per task |
+| `--preset` | Preset horizon and wait-step bundle |
+| `--max-steps` | Rollout horizon override |
+| `--num-steps-wait` | Initial dummy wait steps |
+| `--history-horizon` | Observed history length given to GAM |
+| `--rollout-decode-horizon` | GAM AR decode length before action selection |
+| `--action-horizon` | Model-step chunks executed per policy call |
+| `--action-repeat` | Env steps per predicted action |
+| `--action-repeat-mode` | `hold` or `split_delta` |
+| `--policy-hz` | Policy frequency used by `action-repeat=auto` |
+| `--env-control-hz` | LIBERO robosuite control frequency |
+| `--camera-size` | Simulator camera resolution |
+| `--render-gpu-device-id` | robosuite EGL render GPU override |
+| `--env-process-isolation` | Spawn child env workers |
+| `--output-dir` | Eval output root |
+| `--run-name` | Eval run folder name |
+| `--shard-index` | Shard id for distributed eval |
+| `--shard-count` | Total shard count |
+| `--video-every` | Save one diagnostic video every N global episodes |
+| `--detailed-video` | Save RGB/depth/action diagnostic video |
+| `--trace-actions` | Write per-step action/proprio diagnostics |
+| `--decode-visuals` | Decode depth/RGB for diagnostics |
+| `--temporal-ensemble` | ACT-style low-level action ensemble |
+| `--execution-strategy` | Diagnostic execution strategy |
+| `--execute-chunk-prefix` | Execute a prefix of each chunk before re-observing |
+| `--partial-chunk-history` | Previous-action history policy for prefix execution |
+| `--rotate-policy-input` | Rotate live RGB by 180 degrees |
+| `--proprio-orientation` | `auto`, `rpy`, or `axis_angle` live proprio convention |
+| `--text-prompt-normalization` | Text normalization before encoding |
+| `--action-frame` | Model action frame override |
+| `--wandb` | Enable W&B logging |
+| `--action-stats-key` | Normalizer stats key override |
+| `--plus` | Enable LIBERO-Plus |
+| `--plus-root` | LIBERO-Plus source checkout |
+| `--plus-perturbation` | LIBERO-Plus perturbation filter |
+| `--plus-official-category` | Official category filter such as `camera` or `noise` |
+| `--libero-plus-robot-init-qpos-mode` | Use `original` for official Plus qpos |
+| `--plus-sample-group-by` | Deterministic Plus task sampling group |
+| `--plus-samples-per-group` | Tasks per sampled group |
+
+## CUDA Graph Latency Mode
+
+The paper latency path is an eval-time CUDA graph path inside
+`src/eval_libero_unified.py`. It fuses GAM h=1 inference into one compiled
+callable:
+
+```text
+DA3 shallow encode -> GAMFuturePredictor -> DA3 deep propagation -> ActionHeadV2
+```
+
+Use this mode for model-forward latency measurement:
+
+```bash
+DA3_MAX_OPTIMIZE=1 \
+DA3_COMPILE_INFERENCE_MODE=reduce-overhead \
+DA3_FUSE_SHALLOW=1 \
+DA3_SKIP_FULL_ENCODE=1 \
+DA3_PROFILE_INFERENCE=1 \
+PYTHONPATH=src:$PYTHONPATH python src/eval_libero_unified.py \
+  --ckpt /path/to/checkpoint.pt \
+  --config configs/training/libero_unified/gam/chunk8_150k_2node.yaml \
+  --suites libero_spatial \
+  --task-ids 0 \
+  --num-trials-per-task 1 \
+  --history-horizon 1 \
+  --rollout-decode-horizon 1 \
+  --action-horizon 1 \
+  --action-repeat 1 \
+  --action-repeat-mode split_delta \
+  --camera-size 256 \
+  --env-process-isolation
+```
+
+The log line has this form:
+
+```text
+[INFER PROFILE] H_eff=1 dec_vis=0 full_enc=skip total=...ms ar(no_cache)=...ms ...
+```
+
+For the paper latency number, read the `ar(...)` model-forward field after
+warmup. `total` includes preprocessing, CPU copies, normalization, and logging
+guards.
+
+CUDA graph environment variables:
+
+| Variable | Value | Meaning |
+|----------|-------|---------|
+| `DA3_MAX_OPTIMIZE` | `1` | Enables the fused h=1 path |
+| `DA3_COMPILE_INFERENCE_MODE` | `reduce-overhead` | Uses PyTorch CUDA graph replay mode |
+| `DA3_FUSE_SHALLOW` | `1` | Folds DA3 blocks 0-12 into the fused graph |
+| `DA3_SKIP_FULL_ENCODE` | `1` | Skips the separate full DA3 encode in GAM action selection |
+| `DA3_PROFILE_INFERENCE` | `1` | Prints `[INFER PROFILE]` timing lines |
+| `DA3_CUDAGRAPH_CLONE` | `0` | Keeps fused graph output clone-free for the single graph path |
+| `DA3_MAX_OPTIMIZE_NO_BF16` | `1` | Leaves inference weights in fp32 for ablation |
+
+General per-submodule compile is also available:
+
+| Variable | Values | Meaning |
+|----------|--------|---------|
+| `DA3_COMPILE_INFERENCE` | `all`, `predictor`, `shallow`, `propagate`, `action_head` | Compiles selected eval modules |
+| `DA3_COMPILE_INFERENCE_MODE` | `reduce-overhead`, `max-autotune`, `max-autotune-no-cudagraphs`, `default` | PyTorch compile mode |
+| `DA3_CUDAGRAPH_CLONE` | `1` or `0` | Clones outputs from CUDA graph buffers for separate compiled modules |
+
 ## Notes
 
 - Checkpoints saved under `torch.compile` may contain `_orig_mod.` prefixes;
