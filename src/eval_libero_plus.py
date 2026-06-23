@@ -256,7 +256,7 @@ def load_libero_plus_task_classification(
     path = Path(plus_root).expanduser().resolve() / "libero" / "libero" / "benchmark" / "task_classification.json"
     info["path"] = str(path)
     if not path.exists():
-        print(f"  [plus-warning] official task_classification.json not found at {path}")
+        print(f"  [plus-warning] official task_classification.json missing at {path}")
         return info
 
     with path.open("r") as f:

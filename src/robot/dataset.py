@@ -400,7 +400,7 @@ def _libero_compute_keep_indices(actions: np.ndarray, threshold: float = 1e-4) -
         return np.arange(0, actions.shape[0], dtype=np.int64)
     pose_norm = np.linalg.norm(actions[:, :-1], axis=-1)         # (T,)
     is_low_pose = pose_norm < float(threshold)                    # (T,)
-    grip_eq_prev = np.zeros(actions.shape[0], dtype=bool)         # (T,) — first frame is False
+    grip_eq_prev = np.zeros(actions.shape[0], dtype=bool)         # (T,) : first frame is False
     grip_eq_prev[1:] = actions[1:, -1] == actions[:-1, -1]
     is_noop = np.empty(actions.shape[0], dtype=bool)
     is_noop[0] = bool(is_low_pose[0])                             # first frame: criterion-1 only
@@ -418,8 +418,8 @@ def _libero_depth_memmap_paths(
     depth_root: Path, episode_index: int, hdf5_path: str, demo_key: str,
 ) -> Tuple[Optional[Path], Optional[Path]]:
     """Return (depth_memmap_npy, geometry_npz) paths in the sibling
-    `<gt_depth_root>_memmap/` directory, or (None, None) if that sibling
-    directory does not exist.
+    `<gt_depth_root>_memmap/` directory, with (None, None) for an absent
+    sibling directory.
     """
     sibling = depth_root.with_name(depth_root.name + "_memmap")
     if not sibling.exists():
@@ -1291,9 +1291,9 @@ def _compose_rotvec_batch(rotvecs: torch.Tensor) -> torch.Tensor:
     """Compose left-multiplied base-frame rotation vectors along dim=1.
 
     Args:
-        rotvecs: (N, S, 3) — N groups of S sequential rotation vectors.
+        rotvecs: (N, S, 3) : N groups of S sequential rotation vectors.
     Returns:
-        (N, 3) — composed rotation vector per group, equivalent to applying
+        (N, 3) : composed rotation vector per group, equivalent to applying
         step 0, then step 1, etc. with `R_next = Exp(delta) @ R_now`.
     """
     N, S, _ = rotvecs.shape
@@ -1341,8 +1341,8 @@ class LiberoHDF5SequenceDataset(Dataset):
 
     Pretraining branch note: this loader now emits EEF-relative action labels,
     matching MimicGen and convertible OxE rows. A separate server is currently
-    training LIBERO with the older unmodified world/base OSC_POSE labels; do not
-    mix those action stats or checkpoints with this branch without an explicit
+    training LIBERO with the older unmodified world/base OSC_POSE labels; mix
+    those action stats or checkpoints with this branch only after an explicit
     action-frame conversion.
     """
 
@@ -1409,7 +1409,7 @@ class LiberoHDF5SequenceDataset(Dataset):
         super().__init__()
         if h5py is None:
             raise ModuleNotFoundError(
-                "LiberoHDF5SequenceDataset requires h5py, but it is not installed."
+                "LiberoHDF5SequenceDataset requires h5py; install h5py in this environment."
             )
 
         self.dataset_name = dataset_name
@@ -1523,7 +1523,7 @@ class LiberoHDF5SequenceDataset(Dataset):
         # path list covers every LIBERO suite. This keeps `global_episode_index`
         # in `_build_samples` aligned with the indexing used when the GT depth
         # sidecar files were written (sidecar filenames embed the
-        # all-suite global index — see _libero_depth_sidecar_path). The suite
+        # all-suite global index : see _libero_depth_sidecar_path). The suite
         # filter is then enforced at sample-build time so we still only train
         # on the requested suite.
         self._suite_filter = suite_filter
@@ -1712,8 +1712,8 @@ class LiberoHDF5SequenceDataset(Dataset):
         global_episode_index = 0
         split_stride = self.max_stride if self.random_stride else self.temporal_stride
         for hdf5_path in self.hdf5_paths:
-            # Suite-level filter: skip emitting samples for non-matching suites,
-            # but still advance global_episode_index so it stays aligned with
+            # Suite-level filter: skip emitting samples for non-matching suites
+            # while advancing global_episode_index so it stays aligned with
             # the GT depth sidecar filenames (which were written from the
             # all-suite global ordering).
             suite_skipped = (
@@ -1779,8 +1779,9 @@ class LiberoHDF5SequenceDataset(Dataset):
                                 # row is eligible for the same number of
                                 # action-loss terms over the max supervised
                                 # action span. Boundary observations/actions
-                                # that do not exist are zeroed and masked in
-                                # __getitem__ instead of being represented by
+                                # missing boundary observations/actions are
+                                # zeroed and masked in __getitem__ instead of
+                                # being represented by
                                 # repeated first/last frames.
                                 min_virtual_start = -(supervised_raw_steps - 1)
                                 max_virtual_start = n_kept - 1
@@ -2327,7 +2328,7 @@ class LiberoHDF5SequenceDataset(Dataset):
         for frame_idx in frame_indices:
             src_t = frame_lookup.get(int(frame_idx))
             if src_t is None:
-                raise KeyError(f"Frame {frame_idx} not found in {sidecar}")
+                raise KeyError(f"Frame {frame_idx} missing in {sidecar}")
             timestep_depths: list[torch.Tensor] = []
             timestep_masks: list[torch.Tensor] = []
             timestep_k: list[np.ndarray] = []
@@ -2337,7 +2338,7 @@ class LiberoHDF5SequenceDataset(Dataset):
                 src_v = camera_lookup.get(cam_name)
                 if src_v is None:
                     raise KeyError(
-                        f"Camera {camera_key!r} normalized to {cam_name!r} not found in {sidecar}; "
+                        f"Camera {camera_key!r} normalized to {cam_name!r} missing in {sidecar}; "
                         f"available={sidecar_cameras}"
                     )
                 crop_params = cam_crop_params[camera_key]
@@ -2712,7 +2713,7 @@ class LiberoHDF5SequenceDataset(Dataset):
         if self._uniform_action_sampling:
             # Uniform sampler supervision gives every kept raw action row the
             # same loss count. Statistics must therefore be computed from the
-            # kept rows themselves, not from legacy full-window starts that
+            # kept rows themselves rather than legacy full-window starts that
             # heavily under-sample episode boundaries.
             for hdf5_path, demo_key, _, _, _, n_kept in stat_samples:
                 demo = self._get_hdf5(hdf5_path)["data"][demo_key]
@@ -2875,32 +2876,32 @@ def build_robot_dataset(dataset_cfg: Dict[str, Any], is_eval: bool = False) -> D
     repeat_missing_views = _repeat_missing_views(dataset_cfg)
     if dataset_type == "mimicgen":
         raise NotImplementedError(
-            "dataset.type='mimicgen' is not supported in this public LIBERO release."
+            "dataset.type='mimicgen' is outside this public LIBERO release."
         )
 
     if dataset_type in {"ssv2", "something_something_v2", "video_manifest"}:
         raise NotImplementedError(
-            "dataset.type='video' is not supported in this public LIBERO release."
+            "dataset.type='video' is outside this public LIBERO release."
         )
 
     if dataset_type == "mixer":
         raise NotImplementedError(
-            "dataset.type='mixer' is not supported in this public LIBERO release."
+            "dataset.type='mixer' is outside this public LIBERO release."
         )
 
     if dataset_type == "robocasa":
         raise NotImplementedError(
-            "dataset.type='robocasa' is not supported in this public LIBERO release."
+            "dataset.type='robocasa' is outside this public LIBERO release."
         )
 
     if dataset_type in {"robocasa_cosmos_hdf5", "robocasa_hdf5_cosmos"}:
         raise NotImplementedError(
-            "dataset.type='robocasa_cosmos' is not supported in this public LIBERO release."
+            "dataset.type='robocasa_cosmos' is outside this public LIBERO release."
         )
 
     if dataset_type in {"rlbench", "rlbench_peract", "rlbench_peract18"}:
         raise NotImplementedError(
-            "dataset.type='rlbench' is not supported in this public LIBERO release."
+            "dataset.type='rlbench' is outside this public LIBERO release."
         )
 
     if dataset_type in {"libero_hdf5", "hdf5_libero"}:
@@ -2991,7 +2992,7 @@ def build_robot_dataset(dataset_cfg: Dict[str, Any], is_eval: bool = False) -> D
 
     if dataset_type in {"openx", "oxe", "lerobot_openx", "libero"}:
         raise NotImplementedError(
-            "dataset.type='openx'/'libero' (offline LeRobot) is not supported in "
+            "dataset.type='openx'/'libero' (offline LeRobot) is outside "
             "this public release; train with type='libero_hdf5'. LIBERO-Plus is "
             "an eval-only benchmark (use eval_libero_unified.py --plus, simulator "
             "rollout)."
@@ -3003,13 +3004,13 @@ def build_robot_dataset(dataset_cfg: Dict[str, Any], is_eval: bool = False) -> D
 def compute_action_statistics(dataset: Dataset, max_samples: Optional[int] = None) -> Dict[str, Dict[str, np.ndarray]]:
     if hasattr(dataset, "compute_action_statistics"):
         return dataset.compute_action_statistics(max_samples=max_samples)
-    raise TypeError(f"Dataset {type(dataset)!r} does not expose compute_action_statistics().")
+    raise TypeError(f"Dataset {type(dataset)!r} lacks compute_action_statistics().")
 
 
 def compute_proprio_statistics(dataset: Dataset, max_samples: Optional[int] = None) -> Dict[str, Dict[str, np.ndarray]]:
     if hasattr(dataset, "compute_proprio_statistics"):
         return dataset.compute_proprio_statistics(max_samples=max_samples)
-    raise TypeError(f"Dataset {type(dataset)!r} does not expose compute_proprio_statistics().")
+    raise TypeError(f"Dataset {type(dataset)!r} lacks compute_proprio_statistics().")
 
 
 def summarize_action_statistics(stats_by_key: Dict[str, Dict[str, np.ndarray]]) -> str:
@@ -3047,7 +3048,7 @@ class ActionNormalizer:
         # Several RoboCasa365 mini-repos share one action_stats_key.  The
         # offline stats job stores their combined fixed-stride policy-action
         # distribution as grouped_openx, which is compatible with fixed leaf
-        # datasets but should not be accepted for random-stride timing.
+        # datasets; random-stride timing requires matching stats.
         if actual == "grouped_openx" and str(expected).startswith("fixed:"):
             return True
         return False
@@ -3087,7 +3088,7 @@ class ActionNormalizer:
                 # Disable normalization on constant dims (std ≈ 0).
                 constant_dims = std_t.abs() < self.CONSTANT_DIM_THRESHOLD
             else:
-                # q01_q99 path — disable on degenerate range.
+                # q01_q99 path : disable on degenerate range.
                 constant_dims = (q99 - q01).abs() < self.CONSTANT_DIM_THRESHOLD
             if str(key) in self.FULL_7D_REQUIRED_KEYS:
                 disabled_dims = ~mask_t
@@ -3105,7 +3106,7 @@ class ActionNormalizer:
                     if detail_text:
                         detail_text = f" ({detail_text})"
                     raise ValueError(
-                        f"Action stats for {key!r} do not cover the full 7D Cosmos action{detail_text}. "
+                        f"Action stats for {key!r} leave gaps in the full 7D Cosmos action{detail_text}. "
                         "This stats file/checkpoint normalizer is incompatible with the official "
                         "RoboCasa Cosmos 7D action protocol. Recompute stats with "
                         "--refresh-action-stats so compute_action_statistics writes a full 7D mask."

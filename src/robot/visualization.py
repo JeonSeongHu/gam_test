@@ -48,7 +48,7 @@ def log_training_input_images(
     imgs = batch["all_view_images"]
     if not isinstance(imgs, torch.Tensor):
         return
-    # (B, T, V, 3, H, W) — pre-encoder normalization (raw [0, 1] RGB after augmentation).
+    # (B, T, V, 3, H, W) : pre-encoder normalization (raw [0, 1] RGB after augmentation).
     if imgs.ndim != 6:
         return
     B = int(imgs.shape[0])
@@ -227,7 +227,7 @@ def log_da3_visualizations(
     log_dict = {}
 
     # ========== GT Depth ==========
-    # Encode GT Level 0 features (raw, not latent-normalized)
+    # Encode GT Level 0 features before latent normalization.
     ref_patches, ref_cls = encoder.encode_single(current_norm, level=0, return_cls=True)
     all_patches, all_cls = encoder.encode_single(all_views, level=0, return_cls=True)
 
@@ -1365,7 +1365,7 @@ def log_camera_visualization(
     ax_err.legend(fontsize=7)
     ax_err.grid(True, axis="y", alpha=0.3)
 
-    fig.suptitle(f"Camera Pose: Teacher (solid) vs Student (dashed) — step {step}", fontsize=11)
+    fig.suptitle(f"Camera Pose: Teacher (solid) vs Student (dashed) : step {step}", fontsize=11)
     fig.tight_layout(rect=[0, 0, 1, 0.96])
     wandb.log({f"{prefix}/camera_poses": wandb.Image(fig)}, step=step)
     plt.close(fig)

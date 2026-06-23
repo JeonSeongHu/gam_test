@@ -12,7 +12,7 @@ duplicating the whole training function. The entry point is
      future, feature reg past, optional SIGReg anti-collapse, optional
      DA3-style future depth.
 
-This is a pure utility — no Dataset / DataLoader / optimizer logic here.
+This is a pure utility : no Dataset / DataLoader / optimizer logic here.
 """
 
 from __future__ import annotations
@@ -85,7 +85,7 @@ def extract_level0_slots(
         pos 2..257: 256 patches
 
     Args:
-        raw_level0: (B, T*V, total_tokens, 2*embed_dim) — the `raw` output
+        raw_level0: (B, T*V, total_tokens, 2*embed_dim) : the `raw` output
             from DA3's `_run_backbone` at Level 0 (layer 19). First half is
             the pre-global `local_x` cache from the previous local block,
             matching Robot-GLD's Level-0 latent convention.
@@ -312,7 +312,7 @@ def _compute_gt_ray_map(
     device = K.device
     dtype = K.dtype
     pix = _pixel_grid(H, W, device=device, dtype=dtype)  # (H, W, 3)
-    # K^-1 on each batch element — shape broadcasting via `torch.linalg.inv`.
+    # K^-1 on each batch element : shape broadcasting via `torch.linalg.inv`.
     K_inv = torch.linalg.inv(K)  # (..., 3, 3)
     # dir_cam = K_inv @ [u, v, 1]^T, then rotate by R_c2w into world
     # pix has shape (H, W, 3); unsqueeze for matmul.
@@ -391,9 +391,9 @@ def da3_full_depth_loss(
         pred_depth_conf     (F, H, W)
         pred_ray            (F, Hr, Wr, 6)
         pred_ray_conf       (F, Hr, Wr)
-        target_depth_da3    (F, H, W)           — already normalized by scene_scale
-        target_mask         (F, H, W)           — bool
-        target_intrinsics   (F, 3, 3)           — in pixel units of the 224x224 crop
+        target_depth_da3    (F, H, W)           : already normalized by scene_scale
+        target_mask         (F, H, W)           : bool
+        target_intrinsics   (F, 3, 3)           : in pixel units of the 224x224 crop
         target_extrinsics_c2w (F, 4, 4)
         scene_scale         (F,) or scalar tensor
     """
@@ -581,7 +581,7 @@ def compute_unified_forward_loss(
             per_slot_ae_mask=student_ae,
         )
     # student_feats: list of (patches, cls) per level
-    # student_action_tokens: (B, H*V, 1536) — final normalized action tokens.
+    # student_action_tokens: (B, H*V, 1536) : final normalized action tokens.
     # student_raw: list of raw tensors
 
     # -------- Teacher / target passes (no grad) --------
@@ -595,10 +595,9 @@ def compute_unified_forward_loss(
         teacher_full_raw = teacher_da3.encode_all_levels_raw(target_views_norm)
 
     # Slice teacher_past_raw to match Student's level shapes. The existing
-    # FeatureRegularizer handles a list of levels, but its internal indexing
-    # assumes student_raw tokens include the action slot and teacher_raw does
-    # not. teacher_past_raw = encode_all_levels_raw (no action injection) →
-    # same convention as current Stage 1. Good.
+    # FeatureRegularizer handles a list of levels. Its internal indexing assumes
+    # student_raw tokens include the action slot, while teacher_past_raw from
+    # encode_all_levels_raw follows the current Stage 1 convention.
 
     # -------- Assemble past tokens for the predictor --------
     # We need the Level-0 slot tensor for the student: shape (B, H, V, 258, 1536).
@@ -717,7 +716,7 @@ def compute_unified_forward_loss(
         target_mask = gt_depth_mask[:, H:, :, :, :].to(device=device).bool()
         if target_depth.shape[:3] != z_future.shape[:3]:
             raise ValueError(
-                "GT depth target shape does not match predicted future slots: "
+                "GT depth target shape mismatches predicted future slots: "
                 f"target={tuple(target_depth.shape[:3])} z_future={tuple(z_future.shape[:3])}"
             )
         z_depth = z_future
@@ -1041,10 +1040,10 @@ def compute_gam_forward_loss(
             action_mask = action_mask.unsqueeze(-1)
         past_action_history = past_action_history * action_mask
 
-    # Scheduled-sampling-style masking on past actions (training only — rollout
+    # Scheduled-sampling-style masking on past actions (training only; rollout
     # always uses model's own predicted prev actions). With prob p, zero out
-    # the t>=1 slots so the model learns to also use surrounding context (not
-    # just rely on the prev_action input). Reduces train/rollout distribution
+    # the t>=1 slots so the model learns surrounding context alongside
+    # prev_action input. Reduces train/rollout distribution
     # gap while preserving any episode-start zero token.
     if float(prev_action_mask_rate) > 0.0 and (H > 1 or bool(prev_action_mask_include_t0)):
         # Per-(batch, timestep) mask, broadcast over chunk and action dims.

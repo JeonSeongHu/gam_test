@@ -132,13 +132,13 @@ from eval_video import (
 # Optional CUDA-graph inference compile.
 #
 # Gated entirely by env vars; the DEFAULT (DA3_COMPILE_INFERENCE unset/none)
-# path is a complete no-op — no torch.compile, no cudagraph_mark_step_begin.
+# path skips torch.compile and cudagraph_mark_step_begin.
 #
 #   DA3_COMPILE_INFERENCE      : "none" (default) | "all" | comma subset of
 #                                {predictor, shallow, propagate, action_head}
 #   DA3_COMPILE_INFERENCE_MODE : reduce-overhead (default) | max-autotune |
 #                                max-autotune-no-cudagraphs | default
-#   DA3_CUDAGRAPH_CLONE        : "1" (default) | "0" — wrap compiled outputs in
+#   DA3_CUDAGRAPH_CLONE        : "1" (default) | "0"; wrap compiled outputs in
 #                                the clone module for CUDA-graph modes
 # ---------------------------------------------------------------------------
 
@@ -298,8 +298,8 @@ PER_TASK_FIELDNAMES = [
     "success_rate",
     "avg_steps",
 ]
-DEFAULT_CONFIG = None  # was "configs/training/robot_openx_v3full_nodroid_r2.yaml" — that
-# default was an OpenX config whose dataset.target_hz=5 leaked into LIBERO
+DEFAULT_CONFIG = None
+# OpenX default removed because dataset.target_hz=5 leaked into LIBERO
 # HDF5 evals (ckpt config has no target_hz key, so OmegaConf.merge kept the
 # OpenX default value), forcing action_repeat=4 and ~4× slower / wrong-timing
 # rollouts. With None, --config is optional: when omitted, the architecture
@@ -850,7 +850,7 @@ def image_from_obs(
     if img is None and key.endswith("_image"):
         img = obs.get(key[:-6])
     if img is None:
-        raise KeyError(f"Observation image key '{key}' not found. Keys: {sorted(obs.keys())}")
+            raise KeyError(f"Observation image key '{key}' missing. Keys: {sorted(obs.keys())}")
 
     arr = np.asarray(img)
     if arr.ndim == 2:
@@ -1156,8 +1156,8 @@ def resolve_proprio_orientation_mode(mode: str | None, dataset_cfg: dict[str, An
 def _quat_xyzw_to_robosuite_axis_angle(q_xyzw: torch.Tensor) -> torch.Tensor:
     """Match robosuite `quat2axisangle` for xyzw quaternions.
 
-    Do not force `qw >= 0`: the no-op HDF5 regeneration script stored exactly
-    robosuite's axis-angle convention, whose angle can be in [0, 2*pi].
+    Preserve `qw` sign because the no-op HDF5 regeneration script stored
+    robosuite's axis-angle convention exactly, including angles in [0, 2*pi].
     """
     q = q_xyzw / q_xyzw.norm(dim=-1, keepdim=True).clamp(min=1e-12)
     xyz = q[..., :3]
@@ -1539,7 +1539,7 @@ def resolve_portable_checkpoint_path(
             candidate = root / basename
             if candidate.exists():
                 print(
-                    f"[eval_libero_unified] INFO: {label} path {path_value!r} not found; "
+                    f"[eval_libero_unified] INFO: {label} path {path_value!r} missing; "
                     f"using local candidate {candidate}"
                 )
                 return str(candidate)
@@ -1755,7 +1755,7 @@ def load_stage1_policy(
 
     When `preloaded_modules` is provided (during in-training closed-loop eval),
     the existing in-memory modules are reused instead of loading from disk.
-    Keys consumed (all optional — built from ckpt if absent):
+    Keys consumed, all optional and built from ckpt if absent:
         teacher, student, action_head, proprio_conditioner, future_predictor,
         text_conditioner, action_normalizer, proprio_normalizer.
     The ckpt dict is still consulted for config + fallback weights for any
@@ -1910,8 +1910,8 @@ def load_stage1_policy(
     )
     if use_ema and preloaded_modules:
         raise RuntimeError(
-            "--use-ema is only supported when loading Stage 1 modules from checkpoint. "
-            "In-training closed-loop eval reuses live modules and does not materialize EMA overlays."
+            "--use-ema is supported when loading Stage 1 modules from checkpoint. "
+            "In-training closed-loop eval reuses live modules; EMA overlays are checkpoint-only."
         )
     model = DA3FineTuneModel(student, action_head, proprio_cond).to(device)
     # When preloaded_modules supplies weights, skip the ckpt-driven load.
@@ -1919,7 +1919,7 @@ def load_stage1_policy(
                                 and preloaded_modules.get("action_head") is not None)
     if not _use_preloaded_core:
         if "student_da3" not in ckpt or "action_head" not in ckpt:
-            raise KeyError(f"{ckpt_path} does not look like a Stage 1 checkpoint.")
+            raise KeyError(f"{ckpt_path} is outside the Stage 1 checkpoint format.")
         s1_load = model.student_da3.load_state_dict(strip_compile_prefix(ckpt["student_da3"]), strict=False)
         student_da3_missing_keys, student_da3_unexpected_keys = _log_incompatible_keys(
             "stage1.student_da3",
@@ -1975,7 +1975,7 @@ def load_stage1_policy(
     predictor_H_choices = [int(x) for x in predictor_cfg.get("H_choices", []) if int(x) > 0]
     # In gam training, H is capped at n_action_steps - 1 because the
     # future visual/proprio target is obs_{t+1:t+H}. The current no-op run has
-    # action_steps=9 but H_choices=[8], so "full" rollout decode must mean 8.
+    # action_steps=9 with H_choices=[8], so "full" rollout decode means 8.
     stage1_native_train_horizon = max(
         1,
         min(
@@ -2088,7 +2088,7 @@ def load_stage1_policy(
             cfg_lang_dim = int(predictor_cfg.get("language_dim", 768))
             if cfg_lang_dim != text_conditioner.hidden_size:
                 raise ValueError(
-                    f"predictor.language_dim={cfg_lang_dim} does not match "
+                    f"predictor.language_dim={cfg_lang_dim} mismatches "
                     f"TextConditioner(encoder_type={encoder_type!r}).hidden_size="
                     f"{text_conditioner.hidden_size}."
                 )
@@ -2139,8 +2139,8 @@ def load_stage1_policy(
     )
     max_optimize_active = os.environ.get("DA3_MAX_OPTIMIZE") == "1"
     _inference_compile_info: dict[str, Any] = {}
-    # Resolve the compile mode only when something will actually compile, so the
-    # default no-op path never touches DA3_COMPILE_INFERENCE_MODE validation.
+    # Resolve the compile mode only for active compile paths. The default
+    # no-op path skips DA3_COMPILE_INFERENCE_MODE validation.
     _inference_compile_mode = (
         _resolve_inference_compile_mode()
         if (_inference_compile_targets or max_optimize_active)
@@ -2179,10 +2179,10 @@ def load_stage1_policy(
                 def _h1_build_positions(H, V, num_patches, num_prefix_visual, device, *,
                                         __frozen=_frozen_positions, __orig=_orig_build_positions,
                                         __V=_V_h1):
-                    # Static buffer read for the h=1 inference geometry — no
-                    # allocation, runs inside the CUDA graph. int(H)/int(V) are
+                    # Static buffer read for the h=1 inference geometry. Runs
+                    # inside the CUDA graph. int(H)/int(V) are
                     # Python ints (callers pass H_obs as an int), so the branch is
-                    # a compile-time constant — no graph break.
+                    # a compile-time constant.
                     if __frozen is not None and int(H) == 1 and int(V) == __V:
                         return __frozen
                     return __orig(H, V, num_patches, num_prefix_visual, device)
@@ -2199,7 +2199,7 @@ def load_stage1_policy(
             _max_optimize_meta["rope_positions_cache_error"] = str(exc)[:200]
 
         # 1b) FULL inference prebake of the predictor's concat-mode dynamic
-        # builders, so NOTHING is constructed inside the captured graph:
+        # builders. Captured graphs receive prebaked tensors:
         #   - Force flex_attention OFF (return None) -> the dense additive mask
         #     path is taken; flex BlockMask is a non-replayable object that
         #     fragments the graph. For h=1 the dense mask is tiny (~595x595).
@@ -2361,7 +2361,7 @@ def load_stage1_policy(
 
     # Per-submodule torch.compile. Under max-optimize the predictor / propagate /
     # action_head are FUSED below into a single graph, so skip their separate
-    # compile here (the `and not _fuse_h1` guard) — compiling them individually
+    # compile here for the unfused path. Compiling them individually
     # plus the clone wrappers between them fragments the graph and gives no
     # speedup. The shallow encoder may still be compiled on its own if requested.
     if _inference_compile_targets:
@@ -2420,9 +2420,9 @@ def load_stage1_policy(
     # bf16-cast / prebaked modules above.
     if _fuse_h1:
         global _INFERENCE_CUDAGRAPH_ACTIVE
-        # The fused callables are bare torch.compile (not via
-        # _compile_for_inference), so flip the module-level CUDA-graph flag here
-        # too — call_policy emits cudagraph_mark_step_begin() per step when a
+        # The fused callables are bare torch.compile, outside
+        # _compile_for_inference, so flip the module-level CUDA-graph flag here
+        # too. call_policy emits cudagraph_mark_step_begin() per step when a
         # CUDA-graph compile mode (reduce-overhead / max-autotune) is active.
         if _inference_compile_mode in _CUDAGRAPH_COMPILE_MODES:
             _INFERENCE_CUDAGRAPH_ACTIVE = True
@@ -2630,11 +2630,9 @@ def load_stage1_policy(
         # with one of q/k/v containing non-finite values that drive
         # F.scaled_dot_product_attention's flash/mem-efficient kernel into a
         # divergent loop (a known PyTorch SDPA + non-finite-input failure mode
-        # on aarch64/H100/GH200). We do not yet know whether the predictor
-        # output or the shallow visual tokens are the source, so log both and
-        # sanitize the deep stack input with zero replacement. If a guard fires
-        # we get a deterministic log line at the actual source instead of an
-        # opaque CUDA hang.
+        # on aarch64/H100/GH200). Log predictor output and shallow visual tokens,
+        # then sanitize the deep stack input with zero replacement. A guard gives
+        # a deterministic source line for CUDA hang diagnosis.
         for _name, _t in (("deep_visual", deep_visual), ("deep_actions", deep_actions)):
             _bad = ~torch.isfinite(_t)
             if bool(_bad.any()):
@@ -2651,9 +2649,8 @@ def load_stage1_policy(
         # (vanilla PyTorch) backend for the deep DA3 attention during rollout.
         # The flash-attention CUDA kernel on aarch64+GH200 has been observed to
         # hang inside the DA3 deep stack when called with small batch / small
-        # seq-len + bf16 inputs (rollout-time shape). The math backend is
-        # ~10% slower but is the only one that has never been observed to
-        # deadlock under those conditions.
+        # seq-len + bf16 inputs (rollout-time shape). The math backend is the
+        # stable rollout backend for those conditions.
         _sdpa_ctx = None
         try:
             from torch.nn.attention import SDPBackend, sdpa_kernel  # type: ignore
@@ -2795,8 +2792,8 @@ def load_stage1_policy(
         # Fused single-CUDA-graph fast path (DA3_MAX_OPTIMIZE, decode_steps==1).
         # When the shallow-folded graph is available AND the caller threaded the
         # raw encoder-normalized images through (`observed_images`), run the WHOLE
-        # model — DA3 shallow encode (blocks 0-12) -> predictor -> DA3 deep
-        # propagation (blocks 13-39) -> action head — as ONE compiled callable.
+        # model as ONE compiled callable: DA3 shallow encode (blocks 0-12) ->
+        # predictor -> DA3 deep propagation (blocks 13-39) -> action head.
         # Otherwise fall back to the predictor-only fused graph that consumes the
         # already-encoded shallow `observed_visual_tokens`. Either way the
         # cpu()/normalizer steps stay outside the graph (done here). The fused
@@ -3099,9 +3096,8 @@ def load_stage1_policy(
                     # the NEW current observation each call.
                     # Train-equivalent DA3 deep refinement requires predictor
                     # head outputs for every observed-prefix slot. The old
-                    # incremental path cached attention K/Vs only, so it cannot
-                    # reproduce the train path. Keep it disabled until prefix
-                    # head outputs are cached too.
+                    # incremental path cached attention K/Vs only. Keep it
+                    # disabled until prefix head outputs are cached too.
                     _use_kv = False
                     _persist_ok = _use_kv and predictor_type in {"gam"}
                     _cache_shallow = getattr(policy, "_obs_shallow_cache", None)
@@ -3137,7 +3133,7 @@ def load_stage1_policy(
 
                     # Shallow-fold decision. When the shallow encoder is folded
                     # into the single CUDA graph (h=1, decode_steps==1), the eager
-                    # encode below is REDUNDANT — the graph recomputes shallow
+                    # encode below is REDUNDANT. The graph recomputes shallow
                     # tokens from `images_norm` internally. Skipping the eager
                     # encode here is the entire point of the fold: the ~11ms eager
                     # shallow encode collapses into the captured graph. We still
@@ -4177,8 +4173,8 @@ def load_stage1_policy(
     # visible to the AR generator + policy closures. Here we only surface the
     # status that block accumulated in `_inference_compile_info` onto `info`.
     # When DA3_MAX_OPTIMIZE is unset AND DA3_COMPILE_INFERENCE is unset/"none",
-    # `_inference_compile_info` is empty and nothing is added — behaviour is
-    # identical to the uncompiled path.
+    # `_inference_compile_info` is empty and the behavior matches the
+    # uncompiled path.
     if _inference_compile_targets:
         info["inference_compile_targets"] = _inference_compile_info.get(
             "targets", sorted(_inference_compile_targets)
@@ -4688,7 +4684,7 @@ def rollout_episode(
     proprio_orientation = normalize_proprio_orientation_mode(proprio_orientation)
     if temporal_ensemble and action_frame == "eef_relative":
         raise ValueError(
-            "temporal_ensemble with action_frame='eef_relative' is not supported yet because "
+            "temporal_ensemble with action_frame='eef_relative' is unsupported because "
             "ensemble candidates can come from different policy-call anchors. Use base_delta/eef_delta "
             "or disable temporal ensembling."
         )
@@ -5370,7 +5366,7 @@ def rollout_episode(
                 # (eef-relative inverse transform with degenerate proprio,
                 # cascaded NaN proprio in mujoco state, etc.) produced a
                 # non-finite env_action, replace with a zero open-gripper
-                # action so mujoco physics is not corrupted into the next step.
+                # action so mujoco physics stays stable into the next step.
                 if not np.isfinite(env_action).all():
                     print(
                         f"[rollout WARNING] non-finite env_action replaced with zero "
@@ -5387,7 +5383,7 @@ def rollout_episode(
                     env_info_trace = env_step_trace_info(env_info)
                     # Post-env.step proprio sanity check. OXE-pretrain ckpt +
                     # eef_relative + spatial (OOD combo) produces actions that
-                    # are individually finite/small but accumulate over ~200
+                    # are individually finite/small while accumulating over ~200
                     # steps into NaN/Inf qpos. Subsequent env.step or LIBERO
                     # predicate evaluation then enters an infinite native loop
                     # (stuck stacks observed at binding_utils.step / predicates
@@ -5750,7 +5746,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
             "Live LIBERO robosuite control_freq. Default 20Hz matches LIBERO HDF5 "
             "demo native rate (env_args.control_freq=20 in the HDF5 metadata; "
             "each demo action is a 0.05s OSC_POSE delta). Running eval at any "
-            "other env_hz distorts per-action execution time — the same action "
+            "other env_hz distorts per-action execution time; the same action "
             "delta then covers a different physical duration than training."
         ),
     )
@@ -5790,7 +5786,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output-dir", type=str, default="results/eval_libero")
     parser.add_argument("--run-name", type=str, default=None)
     parser.add_argument("--registry", type=str, default="docs/experiments/eval_registry.json")
-    parser.add_argument("--no-registry", action="store_true", help="Do not append docs/experiments/eval_registry.json")
+    parser.add_argument("--no-registry", action="store_true", help="Skip docs/experiments/eval_registry.json append")
     parser.add_argument(
         "--registry-tier",
         choices=["auto", "canonical", "candidate", "smoke", "debug", "subset", "sweep", "diagnostic", "legacy"],
@@ -5926,8 +5922,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
             "Privileged diagnostic gripper override. default leaves policy actions unchanged. "
             "near_object_close forces a close latch when the target object is within "
             "--near-object-close-threshold of the EEF. basket_release_open forces an open "
-            "latch once the target object is close to the basket in XY. Do not report these "
-            "as default policy success."
+            "latch once the target object is close to the basket in XY. Treat these "
+            "as diagnostic runs outside default policy success."
         ),
     )
     parser.add_argument(
@@ -6081,7 +6077,7 @@ def _is_fatal_rollout_exception(exc: Exception, args: argparse.Namespace) -> boo
     text = f"{type(exc).__name__}: {exc}"
     if bool(getattr(args, "plus", False)):
         dependency_markers = (
-            "MagickWand shared library not found",
+            "MagickWand shared library missing",
             "LIBERO-Plus motion-blur perturbations require",
         )
         if any(marker in text for marker in dependency_markers):
@@ -6209,7 +6205,7 @@ def main() -> None:
     device = _resolve_eval_cuda_device()
     resolved_render_gpu_device_id = _resolve_render_gpu_device_id(args.render_gpu_device_id)
     # Install the Mesa GLContext shim BEFORE any robosuite/MjRenderContext
-    # construction, but only when the native NVIDIA EGL device-display path is
+    # construction when the native NVIDIA EGL device-display path is
     # unavailable. On CSCS nodes the native path must stay active so
     # `render_gpu_device_id` and `MUJOCO_EGL_DEVICE_ID` select the rank-local GPU.
     try:
@@ -6572,11 +6568,11 @@ def main() -> None:
                 "horizon": max_steps + max(0, int(num_steps_wait)),
                 "plus_root": plus_root,
                 "preserve_libero_plus_robot_init_qpos": args.libero_plus_robot_init_qpos_mode == "preserve",
-                # Always False to match in-training closed_loop_libero_eval. Env-rendered
+                # Fixed False to match in-training closed_loop_libero_eval. Env-rendered
                 # depth via MUJOCO EGL leaks GL context across env.step() calls and SIGABRTs
                 # in robosuite/binding_utils.py:read_pixels after 1-2 trials on Daint
                 # GH200 nodes. Detailed_video uses model-predicted depth (policy.last_debug),
-                # not env depth, so this does not affect video content.
+                # so video content stays model-predicted.
                 "camera_depths": False,
                 "env_image_hflip": bool(
                     policy_info.get(
@@ -6922,8 +6918,7 @@ def main() -> None:
                     if obs_dump_dir is not None and result.get("frames"):
                         # Dump the raw first/last rollout frames as PNG so the
                         # baseline's actual input view can be eyeballed without
-                        # MP4 decoding. The video also contains them, but PNGs
-                        # are friendly for thumbnails / git diffs.
+                        # MP4 decoding. PNGs are friendly for thumbnails / git diffs.
                         try:
                             from PIL import Image as _PILImage
 

@@ -240,7 +240,7 @@ def collate_fn(batch):
             ])
     # Mixed batches may have only some samples carrying episode_index (OxE) or
     # episode_id (MimicGen).  Stack episode_index if every sample has it;
-    # otherwise skip — it's an optional metadata field.
+    # otherwise skip : it's an optional metadata field.
     if all("episode_index" in b for b in batch):
         result["episode_index"] = torch.stack([b["episode_index"] for b in batch])
     if all("episode_id" in b for b in batch):
@@ -262,7 +262,7 @@ def collate_fn(batch):
             for b in batch
         ])
     # GT depth keys may be present on only a subset of the batch (mixer scenario
-    # where MimicGen samples carry sidecars but OxE samples do not).  We stack
+    # where MimicGen samples carry sidecars while OxE samples carry empty entries). We stack
     # if ANY sample has the key, filling missing samples with zeros (mask=False
     # for gt_depth_mask).  The unified depth loss can then fill mask-empty
     # sample/time/view slots with teacher DA3 pseudo-depth when fallback is on.
@@ -328,7 +328,7 @@ def _dataloader_worker_init(worker_id: int):
     with 4 ranks × num_workers=8 = 36 python processes, the resulting
     1000+ OMP/Torch threads saturate the load average (~50+) and stall all
     of the small tensor ops inside the dataset's crop/resize/normalize
-    chain — a torch.stack that should take 0.1 ms ends up at 40 ms.
+    chain : a torch.stack that should take 0.1 ms ends up at 40 ms.
     Forcing 1 thread per worker removes the contention; the main trainer
     still gets its default multi-threaded math for model forwards.
     """
@@ -401,8 +401,8 @@ class RestartableDistributedSampler(DistributedSampler):
 class VirtualEpochDataset(Dataset):
     """Repeat a small map-style dataset to provide enough batches per epoch.
 
-    This does not change the underlying samples or normalization/stat methods;
-    it only makes DistributedSampler/DataLoader see a longer epoch. Repeated
+    This preserves the underlying samples and normalization/stat methods while
+    making DistributedSampler/DataLoader see a longer epoch. Repeated
     indices are acceptable for datasets that randomize starts/augmentations in
     __getitem__, and they let DataLoader workers prefetch multiple batches
     instead of rebuilding a one-batch epoch every optimizer step.
@@ -484,7 +484,7 @@ def _set_train_sampler_position(
             )
     elif rank == 0 and logger is not None:
         logger.warning(
-            "Train sampler does not support mid-epoch resume; recreated iterator "
+            "Train sampler lacks mid-epoch resume support; recreated iterator "
             "may replay epoch prefix at epoch=%d batch=%d",
             int(epoch),
             int(start_batch_idx),

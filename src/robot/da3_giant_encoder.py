@@ -10,21 +10,19 @@ import torch.nn as nn
 from torch.utils.checkpoint import checkpoint as torch_checkpoint
 
 
-# flex_attention availability — used for memory-cheap block-causal mask on the
+# flex_attention availability for memory-cheap block-causal masking on the
 # DA3 deep stack's global attention path. SDPA with a custom additive mask
 # falls back to math/mem-efficient backends that materialize the full
 # [B, H, L, S] attention score tensor, which OOMs at H=8 V=2 K=258 (seq=4128
 # per timestep block). FlexAttention uses a sparse BlockMask + a per-block
 # kernel that never materializes the dense score matrix.
 #
-# CRITICAL: flex_attention MUST be torch.compile()'d to use the fused kernel.
-# An uncompiled call silently falls back to a "materialize full scores" path
-# (the upstream PyTorch warning says so) which OOMs at production scale —
-# verified at L=4128, H=24, bf16: uncompiled peak 5.39 GB vs compiled 0.07 GB
-# per call. Model-level torch.compile around the encoder is NOT sufficient
-# because graph breaks in our deep-stack loop (conditionals, prefix-length
-# recursion, method indirection) drop the flex_attention call back to eager.
-# We therefore wrap the imported function eagerly at module load.
+# CRITICAL: flex_attention must be torch.compile()'d to use the fused kernel.
+# Eager calls materialize full scores and OOM at production scale: verified at
+# L=4128, H=24, bf16 with eager peak 5.39 GB vs compiled 0.07 GB per call.
+# Model-level torch.compile around the encoder is insufficient because graph
+# breaks in our deep-stack loop drop the flex_attention call back to eager. We
+# wrap the imported function at module load.
 try:
     from torch.nn.attention.flex_attention import (
         flex_attention as _flex_attention_raw,
@@ -90,8 +88,8 @@ class _StubCallable:
 
     def __call__(self, *args, **kwargs):
         raise RuntimeError(
-            f"{self._name} is a stub — the real module is not installed in "
-            "this environment. Stage 2 frozen-encoder inference does not need it."
+            f"{self._name} is a stub: the real module is missing in "
+            "this environment. Stage 2 frozen-encoder inference skips it."
         )
 
     def __getitem__(self, key):
@@ -185,7 +183,7 @@ def _install_da3_optional_stubs() -> None:
         if name in sys.modules:
             continue
         if _try_import(name):
-            # Real package is installed — leave it alone.
+            # Real package is installed; leave it alone.
             continue
         sys.modules[name] = _StubModule(name)
     if "addict" not in sys.modules:
@@ -234,7 +232,7 @@ class DA3GiantEncoder(nn.Module):
         # VGA-style (arXiv:2604.12908): at frame-wise local attention layers,
         # action tokens attend only among themselves while image tokens do
         # per-view local attention. Global attention merges the two streams.
-        # Weights are SHARED with the baseline DA3 block — only the token
+        # Weights are SHARED with the baseline DA3 block. Only the token
         # grouping into the same block call is changed. Default False keeps
         # current behavior bit-identical.
         self.action_only_frame_attn = bool(action_only_frame_attn)
@@ -279,11 +277,11 @@ class DA3GiantEncoder(nn.Module):
         if self.n_action_steps > 0:
             # Shared base token (1, 1, D)
             self.action_token = nn.Parameter(torch.zeros(1, 1, self.embed_dim))
-            # Per-timestep embedding (1, T_max, D) — sinusoidal init, learnable
+            # Per-timestep embedding (1, T_max, D), sinusoidal init, learnable
             self.action_timestep_embed = nn.Parameter(
                 torch.zeros(1, max_timesteps, self.embed_dim)
             )
-            # Per-view embedding (1, V_max, D) — learnable, distinguishes cameras
+            # Per-view embedding (1, V_max, D), learnable, distinguishes cameras
             self.action_view_embed = nn.Parameter(
                 torch.zeros(1, max_views, self.embed_dim)
             )
@@ -336,8 +334,8 @@ class DA3GiantEncoder(nn.Module):
     def _load_full_model(self, ckpt_path: str, model_name: str):
         # DA3's api.py eagerly pulls in export / pose_align / output_processor,
         # which transitively import moviepy, pycolmap, trimesh, imageio, evo,
-        # addict — none of which we use for frozen-encoder inference. Instead
-        # of vendoring patches into DA3, register recursive stubs in sys.modules
+        # addict. Frozen-encoder inference skips those modules, so register
+        # recursive stubs in sys.modules
         # before importing DA3.
         _install_da3_optional_stubs()
         from depth_anything_3.api import DepthAnything3
@@ -511,12 +509,12 @@ class DA3GiantEncoder(nn.Module):
     ) -> torch.Tensor:
         """Build (B, T*V, 1, D) action tokens.
 
-        Conditioning modes (mutually exclusive — evaluated in order):
+        Conditioning modes (mutually exclusive, evaluated in order):
           1. `per_slot_ae_mask` given (preferred for unified future-predictor):
              deterministic per-timestep AE/noact selection. mask[t]=True ->
              add action_input_proj(action_input[t]); False -> learnable-only.
              Required to avoid GT future leakage (spec rule).
-          2. `force_action_input`: Stage 2 GT generation — always AE.
+          2. `force_action_input`: Stage 2 GT generation : always AE.
           3. Stochastic (legacy Stage 1): per-sample AE at `action_input_rate`.
 
         At inference without a mask and no action_input, always uses the
@@ -668,8 +666,8 @@ class DA3GiantEncoder(nn.Module):
         # VGA-style two-stream state (activates only when the flag is on AND
         # action tokens get injected; otherwise this path is skipped).
         use_two_stream = bool(self.action_only_frame_attn) and bool(inject_action)
-        img_x: Optional[torch.Tensor] = None   # (B, V, N_img, D) — cam + reg + patches, no action
-        act_x: Optional[torch.Tensor] = None   # (B, V, 1, D) — one action token per view
+        img_x: Optional[torch.Tensor] = None   # (B, V, N_img, D): cam + reg + patches
+        act_x: Optional[torch.Tensor] = None   # (B, V, 1, D) : one action token per view
         img_local: Optional[torch.Tensor] = None
         act_local: Optional[torch.Tensor] = None
 
@@ -688,8 +686,8 @@ class DA3GiantEncoder(nn.Module):
             else:
                 g_pos, l_pos = pos_nodiff, pos
 
-            # Skip DA3's reference view reordering (saddle_balanced) — always use "first"
-            # (DA3 forward_features does reorder at alt_start-1, but we bypass it here)
+            # Skip DA3's reference view reordering (saddle_balanced); always use "first".
+            # DA3 forward_features reorders at alt_start-1, and this path bypasses it.
 
             if trans.alt_start != -1 and i == trans.alt_start:
                 camera_tokens = self._build_camera_tokens(
@@ -772,7 +770,7 @@ class DA3GiantEncoder(nn.Module):
                     # Action stream: reshape to (B, 1, V, D) so process_attention's
                     # "local" mode (which flattens view dim into batch) computes a
                     # single attention over all V action tokens together. No spatial
-                    # RoPE for action tokens — action_timestep_embed already encodes
+                    # RoPE for action tokens : action_timestep_embed already encodes
                     # temporal position internally.
                     act_grouped = act_x.transpose(1, 2).contiguous()  # (B, 1, V, D)
                     act_grouped = trans.process_attention(
@@ -864,12 +862,12 @@ class DA3GiantEncoder(nn.Module):
             if p.shape[-1] == 2 * embed_dim:
                 first = p[..., :embed_dim]
                 # `trans.norm` weights track the surrounding module dtype (bf16
-                # under DeepSpeed bf16), but DPT callers upcast `p` to float32
+                # under DeepSpeed bf16). DPT callers upcast `p` to float32
                 # before passing it in (see `_prepare_dpt_head_for_float_decode`
                 # / the enclosing `torch.autocast(enabled=False)` block). Match
                 # the input to the LayerNorm's own weight dtype so F.layer_norm
-                # doesn't raise `expected scalar type X but found Y`, then cast
-                # back to the rest of `p`'s dtype for cat.
+                # to avoid dtype mismatch errors, then cast back
+                # to the rest of `p`'s dtype for cat.
                 second = trans_norm(
                     p[..., embed_dim:].to(trans_norm_dtype)
                 ).to(p.dtype)
@@ -983,7 +981,7 @@ class DA3GiantEncoder(nn.Module):
 
         Returns:
             pose_enc: (B, V, 9) camera pose encoding [t(3), qvec(4), fov(2)],
-            or None if cam_dec is not available.
+            or None when cam_dec is unavailable.
         """
         cam_dec = self.da3_model.model.cam_dec
         if cam_dec is None:
@@ -1284,12 +1282,12 @@ class DA3GiantEncoder(nn.Module):
         flex_attention with a block-causal BlockMask.
 
         Replicates DA3's `Transformer.process_attention(global)` + the
-        block's pre-norm attention + LayerScale + residual + FFN, but
-        substitutes flex_attention(q, k, v, block_mask=...) for SDPA so
+        block's pre-norm attention + LayerScale + residual + FFN while
+        substituting flex_attention(q, k, v, block_mask=...) for SDPA so
         the [B, H, L, S] attention score tensor is never materialized.
 
         Args:
-            x_4d:    (B, total_view, token_count, C) — pre-attn input.
+            x_4d:    (B, total_view, token_count, C) : pre-attn input.
             block:   one DA3 transformer block (has .norm1, .attn, .ls1,
                      .norm2, .mlp, .ls2 sub-modules; matches DA3's
                      dinov2.layers.block.Block / NestedTensorBlock API).
@@ -1297,7 +1295,7 @@ class DA3GiantEncoder(nn.Module):
             block_mask: flex_attention BlockMask covering the flattened
                      (B, total_view * token_count, C) seq.
 
-        Returns: (B, total_view, token_count, C) — same shape as input.
+        Returns: (B, total_view, token_count, C) : same shape as input.
         """
         if not _HAS_FLEX_ATTENTION:
             raise RuntimeError(
@@ -1323,7 +1321,7 @@ class DA3GiantEncoder(nn.Module):
         if attn.rope is not None and pos_flat is not None:
             q = attn.rope(q, pos_flat)
             k = attn.rope(k, pos_flat)
-        # flex_attention expects (B, H, L, D) — same as SDPA. Bool BlockMask
+        # flex_attention expects (B, H, L, D) : same as SDPA. Bool BlockMask
         # broadcasts across B and H.
         out = _flex_attention(q, k, v, block_mask=block_mask)
         out = out.transpose(1, 2).reshape(B_, N_, C_)
@@ -1459,9 +1457,9 @@ class DA3GiantEncoder(nn.Module):
         # Optional strict timestep-block-causal mask for the deep global
         # attention. Without it, action token at timestep t can attend to
         # predicted obs tokens at timesteps > t (the predictor itself is
-        # causal, but bidirectional global attention re-mixes timesteps).
+        # causal while bidirectional global attention re-mixes timesteps).
         # When enabled, each token is constrained to attend only to tokens
-        # at timesteps <= its own — local within-timestep attention is
+        # at timesteps <= its own. Local within-timestep attention is
         # unaffected. See docs/architecture.md "GAM AR FuturePredictor"
         # for the leakage discussion this fixes.
         #
@@ -1478,7 +1476,7 @@ class DA3GiantEncoder(nn.Module):
                     "torch.nn.attention.flex_attention; upgrade PyTorch."
                 )
             # Cache BlockMask by (steps, v_count, token_count, device).
-            # Rebuilding every forward would also be cheap, but a stable
+            # Rebuilding every forward is cheap; a stable
             # BlockMask helps the compiled flex_attention reuse its cache.
             cache_key = (int(steps), int(v_count), int(token_count), str(current_x.device))
             cached = self._deep_flex_block_mask_cache.get(cache_key)

@@ -7,16 +7,16 @@ Usage (inside the CSCS container):
 Checks performed:
     1. Build the predictor with default kwargs (no legacy keys).
     2. Count trainable parameters.
-    3. bf16 forward at H=4 and H=16 — shape/dtype/finite checks.
+    3. bf16 forward at H=4 and H=16: shape/dtype/finite checks.
     4. flex_attention availability (informational).
-    5. Causal-leak tests (the critical part — must pass):
+    5. Causal-leak tests:
        a. Past invariance: modify inputs at step t, verify outputs at
           steps < t are bitwise identical (no future → past leak).
        b. Future sensitivity: modify inputs at step t, verify outputs at
           steps > t actually change (causal forward flow works).
        c. Within-step bidirectional: modify proprio at step t, verify
           that visual output at the SAME step t changes (intra-block is
-          full attention, not causal within a step).
+          full attention within a step).
        d. Mask-backend parity: same input through flex_attention BlockMask
           and through the dense-mask fallback must produce matching
           outputs (≤ 5e-3 max abs diff in fp32). Only runs if flex is
@@ -26,9 +26,8 @@ The "past invariance" test is the canonical proof of no causal leak: if
 modifying anything at step t changes outputs at step k < t, the mask is
 broken.
 
-This is *not* a full training smoke — it exercises the predictor in
-isolation without DA3, dataset, or DeepSpeed, so it is safe to run on a
-single GPU or even CPU.
+This smoke exercises the predictor in isolation without DA3, dataset, or
+DeepSpeed, so it is safe to run on a single GPU or even CPU.
 """
 from __future__ import annotations
 
@@ -131,7 +130,7 @@ def test_shape_and_finite(device: torch.device, dtype: torch.dtype) -> None:
 
 
 # --------------------------------------------------------------------------
-# Test 2: causal leak — past invariance
+# Test 2: causal leak: past invariance
 # --------------------------------------------------------------------------
 
 def _extract_step_outputs(out: dict, step: int) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -157,7 +156,7 @@ def test_causal_past_invariance(device: torch.device) -> None:
 
     base_inp = _sample_inputs(predictor, H=H, device=device, seed=7)
 
-    # Pick a step to perturb — use t=3 so we have several past steps to check.
+    # Pick t=3 so several past steps can be checked.
     t_perturb = 3
 
     # Build a modified input: bump visual / proprio / action at step t_perturb
@@ -197,13 +196,13 @@ def test_causal_past_invariance(device: torch.device) -> None:
     sensitive = [(s, v, p, a) for s, v, p, a in max_diffs if s >= t_perturb]
     unmoved = [e for e in sensitive if max(e[1], e[2], e[3]) < 1e-3]
     if unmoved:
-        print("  [CAUSAL FORWARD BROKEN] perturbing step did not affect future outputs")
+        print("  [CAUSAL FORWARD BROKEN] perturbing step left future outputs unchanged")
         for step, v, p, a in unmoved:
             print(f"    step={step}  v={v:.3e}  p={p:.3e}  a={a:.3e}")
         raise AssertionError("Causal forward flow appears dead")
 
     print(
-        f"  [past-invariance]  perturb@t={t_perturb} — past steps <{t_perturb} "
+        f"  [past-invariance]  perturb@t={t_perturb}: past steps <{t_perturb} "
         f"max diff {max(max(v, p, a) for s, v, p, a in max_diffs if s < t_perturb):.3e} (≤ 1e-5 required)"
     )
     print(
@@ -218,7 +217,7 @@ def test_causal_past_invariance(device: torch.device) -> None:
 
 def test_within_step_bidirectional(device: torch.device) -> None:
     """Modify ONLY proprio at step t; verify visual output at SAME step t
-    changes (within-block attention is bidirectional, not intra-block causal).
+    changes under bidirectional within-block attention.
     """
     predictor = _build(device).eval()
     H = 4
@@ -247,8 +246,8 @@ def test_within_step_bidirectional(device: torch.device) -> None:
 # --------------------------------------------------------------------------
 
 def test_mask_backend_parity(device: torch.device) -> None:
-    """Run the same input twice — once with flex_attention, once with dense
-    mask — and verify outputs match. Only runs if flex is available.
+    """Run the same input through flex_attention and dense-mask backends, then
+    verify output parity. Only runs if flex is available.
     """
     if not _HAS_FLEX or device.type != "cuda":
         print("  [mask-parity]  SKIP (flex unavailable or cpu)")
@@ -276,7 +275,7 @@ def test_mask_backend_parity(device: torch.device) -> None:
         max_diff = max(max_diff, d)
     if max_diff > 5e-3:
         raise AssertionError(
-            f"flex_attention and dense-mask backends diverge — max diff {max_diff:.3e} > 5e-3 tolerance"
+            f"flex_attention and dense-mask backends diverge: max diff {max_diff:.3e} > 5e-3 tolerance"
         )
     print(f"  [mask-parity]  flex vs dense max diff = {max_diff:.3e} (≤ 5e-3 required)")
 

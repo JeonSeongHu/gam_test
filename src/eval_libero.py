@@ -42,7 +42,7 @@ def get_obs_images(obs, camera_names, image_size):
             key = cam
             img = obs.get(key)
         if img is None:
-            raise KeyError(f"Camera '{cam}' not found in obs keys: {sorted(obs.keys())}")
+            raise KeyError(f"Camera '{cam}' missing in obs keys: {sorted(obs.keys())}")
         img = np.asarray(img, dtype=np.uint8)
         if img.ndim == 2:
             img = np.stack([img] * 3, axis=-1)
@@ -96,8 +96,8 @@ def rollout_episode(
         current_images = get_obs_images(obs, LIBERO_CAMERA_NAMES, image_size)  # (V, 3, H, W)
         current_proprio = get_obs_proprio(obs)
 
-        # Model expects (B, T*V, 3, H, W) — for single-step input, T=1
-        # But our model needs T timesteps of input. For closed-loop, we use T=1
+        # Model expects (B, T*V, 3, H, W) : for single-step input, T=1
+        # The model needs T timesteps of input. For closed-loop, we use T=1
         # and let the model predict the action sequence.
         V = current_images.shape[0]
         images_input = current_images.unsqueeze(0).to(device)  # (1, V, 3, H, W)
@@ -109,7 +109,7 @@ def rollout_episode(
             with torch.amp.autocast("cuda", dtype=torch.bfloat16, enabled=use_bf16):
                 action_pred, _ = model(images_norm, proprio=proprio_input)
 
-        # action_pred: (1, T, 7) — take first action_horizon steps
+        # action_pred: (1, T, 7) : take first action_horizon steps
         pred_actions = normalizer.denormalize(action_pred[0])  # (T, 7)
         pred_actions_np = pred_actions.cpu().float().numpy()
 
@@ -176,7 +176,7 @@ def main():
 
     if args.pro:
         if not os.path.exists(args.pro_root):
-            print(f"LIBERO-PRO not found at {args.pro_root}")
+            print(f"LIBERO-PRO missing at {args.pro_root}")
             print("Run: bash scripts/setup_libero_pro.sh")
             sys.exit(1)
         # Add LIBERO-PRO to path for perturbation utilities
@@ -224,7 +224,7 @@ def main():
     encoder_mean = teacher.encoder_mean.float().to(device)
     encoder_std = teacher.encoder_std.float().to(device)
 
-    # Action normalizer — use libero stats or mimicgen stats
+    # Action normalizer : use libero stats or mimicgen stats
     normalizer = ActionNormalizer(action_dim=7)
 
     # --- WandB ---

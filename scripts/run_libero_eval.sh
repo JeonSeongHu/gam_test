@@ -40,7 +40,7 @@ if [[ -d "$DA3_LOCAL_IMAGEMAGICK/lib" ]]; then
 fi
 
 if [[ ! -d "$DA3_LIBERO_DIR" ]]; then
-    echo "ERROR: LIBERO data not found at DA3_LIBERO_DIR=$DA3_LIBERO_DIR" >&2
+    echo "ERROR: LIBERO data missing at DA3_LIBERO_DIR=$DA3_LIBERO_DIR" >&2
     echo "Set DA3_LIBERO_DIR to the LIBERO data root before running." >&2
     exit 1
 fi

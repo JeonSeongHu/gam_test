@@ -1,18 +1,18 @@
-# GAM: Geometric Action Model — LIBERO / LIBERO-Plus
+# GAM: Geometric Action Model for LIBERO / LIBERO-Plus
 
 This repository is the public implementation of **GAM (Geometric Action
 Model)** for LIBERO robot manipulation. GAM is a single-stage **world-action
-model** built on **DA3 (Depth Anything 3)**: blocks 0–12 of DA3-Giant act as a
+model** built on **DA3 (Depth Anything 3)**: blocks 0-12 of DA3-Giant act as a
 frozen per-view geometric encoder; a **`GAMFuturePredictor`** (dense
 block-autoregressive transformer) sits at block 12 and predicts next-step
-visual / proprio / action tokens; DA3 blocks 13–39 then consume the predicted
+visual / proprio / action tokens; DA3 blocks 13-39 then consume the predicted
 sequence and emit action tokens that an MLP action head turns into robot
 actions.
 
 This repository contains **only** the DA3-Giant `gam` code. Training is on
 **LIBERO** (HDF5 demos); evaluation is closed-loop in simulation on **LIBERO** and
 **LIBERO-Plus** (the LIBERO-Plus perturbed-task benchmark). LIBERO-Plus is an
-eval-only benchmark — there is no offline LIBERO-Plus training path here.
+eval-only benchmark.
 
 ## Architecture (one stage)
 
@@ -43,17 +43,17 @@ Losses (compute_gam_forward_loss): action L1 + future-feature distillation
 | `src/robot/dataset.py` | LIBERO HDF5 training dataset + action/proprio normalizers |
 | `src/robot/rollout_env.py`, `closed_loop_libero_eval.py` | LIBERO simulator rollout |
 | `configs/training/libero_unified/` | Training configs (smoke / baseline / gam / data_variants / resume_variants / deepspeed) |
-| `Depth-Anything-3/` | DA3 backbone source — **clone separately** (see Setup) |
+| `Depth-Anything-3/` | DA3 backbone source. **Clone separately** (see Setup) |
 
 ## Setup
 
-Reproducible from scratch on a normal CUDA GPU server — pick **one** of the three. All install the identical
+Reproducible from scratch on a normal CUDA GPU server. Pick **one** of the three. All install the identical
 pinned package set (see `requirements.txt`). The validated reference environment is
-Python 3.12 + a torch 2.8 GH200 build; the pins are public and work on torch ≥ 2.5.
+Python 3.12 + a torch 2.8 GH200 build; the pins are public and work on torch >= 2.5.
 
-### Option A — Docker (recommended; fully self-contained)
+### Option A: Docker (recommended; fully self-contained)
 Installs the pinned Python stack, the DA3 backbone, LIBERO, LIBERO-Plus, and the
-headless-MuJoCo GL/EGL system libraries — nothing else to clone.
+headless-MuJoCo GL/EGL system libraries.
 
 ```bash
 docker build -t da3-libero .
@@ -62,13 +62,13 @@ docker run --gpus all -it --rm \
   -e WANDB_API_KEY=$WANDB_API_KEY da3-libero
 ```
 
-### Option B — conda
+### Option B: conda
 ```bash
 conda env create -f environment.yml && conda activate da3-libero
 bash scripts/setup_sources.sh          # clone + install DA3 backbone, LIBERO, LIBERO-Plus
 ```
 
-### Option C — venv + pip
+### Option C: venv + pip
 ```bash
 python3.12 -m venv .venv && source .venv/bin/activate
 pip install torch==2.5.1 torchvision --index-url https://download.pytorch.org/whl/cu124
@@ -79,23 +79,22 @@ bash scripts/setup_sources.sh
 ```
 
 `scripts/setup_sources.sh` clones the **DA3 backbone** (`ByteDance-Seed/Depth-Anything-3`,
-present-on-disk only — `da3_giant_encoder` adds `Depth-Anything-3/src` to `sys.path`),
-the **LIBERO** benchmark (installed `--no-deps` — LIBERO's own `requirements.txt` pins
-old, conflicting versions of numpy/transformers/gym), and **LIBERO-Plus** (eval only).
+present on disk for `da3_giant_encoder`, which adds `Depth-Anything-3/src` to `sys.path`),
+the **LIBERO** benchmark (installed with `--no-deps` to keep the pinned package set stable),
+and **LIBERO-Plus** (eval only).
 Commits are pinned in the script / Dockerfile.
 
 Then per shell:
 ```bash
 export DA3_ROOT=/path/to/your/data_root  # configs resolve all data/ckpt paths under ${DA3_ROOT}
 export DA3_LIBERO_SOURCE_DIR=$DA3_ROOT/LIBERO
-export PYTHONPATH=$DA3_ROOT/src:$DA3_LIBERO_SOURCE_DIR:$PYTHONPATH   # LIBERO repo root only — NOT .../LIBERO/libero
+export PYTHONPATH=$DA3_ROOT/src:$DA3_LIBERO_SOURCE_DIR:$PYTHONPATH   # LIBERO repo root
 export MUJOCO_GL=egl PYOPENGL_PLATFORM=egl    # osmesa for software rendering
 export WANDB_API_KEY=...                       # optional; only with --wandb
 ```
 
 `requirements.txt` is the curated, public, pinned list (the install target).
-`requirements-cscs.lock` is a reference freeze of the exact validated cluster env and is
-**not** directly installable (it points at NVIDIA-container-internal wheels).
+`requirements-cscs.lock` is a reference freeze of the exact validated cluster env.
 
 ### Data & weights (download separately, lay out under `$DA3_ROOT`)
 All machine-specific paths in the configs are `${oc.env:DA3_ROOT,.}/...` (OmegaConf):
@@ -107,9 +106,9 @@ $DA3_ROOT/
   data/libero_noop/_stats/               # action/proprio normalizer stats (auto-computed if absent)
 ```
 
-- **DA3-Giant base weights** `track4world_da3.pth` — DA3-Giant initialization the encoder fine-tunes from; from the Depth-Anything-3 release.
-- **LIBERO HDF5 demos** — the replayed no-op LIBERO HDF5s. **GT depth is embedded inside these HDF5s** (`obs/agentview_depth`, `obs/eye_in_hand_depth`); configs set `gt_depth_root: null` and the loader reads depth directly from the HDF5 — there is **no external depth sidecar**.
-- **LIBERO-Plus (eval only)** — perturbed-task benchmark from source (`sylvestf/LIBERO-plus`), used by `eval_libero_unified.py --plus` (simulator rollout). Not a training dataset.
+- **DA3-Giant base weights** `track4world_da3.pth`: DA3-Giant initialization the encoder fine-tunes from; from the Depth-Anything-3 release.
+- **LIBERO HDF5 demos**: replayed no-op LIBERO HDF5s with embedded GT depth (`obs/agentview_depth`, `obs/eye_in_hand_depth`). Configs set `gt_depth_root: null`, and the loader reads depth directly from the HDF5.
+- **LIBERO-Plus (eval only)**: perturbed-task benchmark from source (`sylvestf/LIBERO-plus`), used by `eval_libero_unified.py --plus` (simulator rollout).
 
 ## Public HF checkpoints
 
@@ -135,7 +134,7 @@ These are GAM checkpoints with `predictor.enabled: true` and
 ## Train
 
 ```bash
-# single-GPU smoke (1 step) — point DA3_ROOT at a tiny LIBERO subset first
+# single-GPU smoke (1 step). Point DA3_ROOT at a tiny LIBERO subset first.
 PYTHONPATH=src:$PYTHONPATH python src/train_robot.py \
   --config configs/training/libero_unified/smoke/gam_chunk2.yaml \
   --single-gpu --set training.max_steps=1
@@ -168,9 +167,9 @@ PYTHONPATH=src:$PYTHONPATH python src/eval_libero_unified.py \
 
 ## Standalone LIBERO-Plus eval on local GPUs
 
-The public standalone path does **not** assume Slurm or any cluster scheduler.
-Run one process per GPU, shard with explicit `--shard-index` / `--shard-count`,
-and keep LIBERO-Plus robot initialization in the official original-qpos mode.
+The public standalone path uses local CUDA GPU processes. Run one process per
+GPU, shard with explicit `--shard-index` / `--shard-count`, and keep LIBERO-Plus
+robot initialization in the official original-qpos mode.
 
 The wrapper below does that and aggregates shard outputs into one suite-level
 `summary.json` and `per_task.csv`:
@@ -207,8 +206,7 @@ Default protocol:
 - `--env-process-isolation`
 
 `--libero-plus-robot-init-qpos-mode original` is intentional: LIBERO-Plus
-rollout should use the original benchmark robot init qpos instead of a
-DA3-specific qpos-preserve override.
+rollout uses the original benchmark robot init qpos.
 
 The full LIBERO-Plus suite contains 10,030 one-trial episodes:
 
@@ -219,8 +217,8 @@ The full LIBERO-Plus suite contains 10,030 one-trial episodes:
 | `libero_goal` | 2,591 |
 | `libero_10` | 2,519 |
 
-Cluster schedulers can wrap the same script, but the eval path itself is just
-local CUDA processes plus explicit shards.
+Cluster schedulers can wrap the same local CUDA process and explicit-shard
+workflow.
 
 ## Notes
 - Checkpoints saved under `torch.compile` carry an `_orig_mod.` prefix; the loader strips it.

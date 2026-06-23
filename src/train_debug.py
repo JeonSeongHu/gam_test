@@ -171,9 +171,9 @@ def _debug_log_nonfinite_forward_state(
             bad_outputs,
         )
 
-    # On failure, scan all trainable params once. This is expensive but happens
-    # only on the failing step and avoids missing a parameter outside the active
-    # step-by-step debug filter.
+    # On failure, scan all trainable params once. This expensive path runs only
+    # on the failing step and catches parameters outside the active step-by-step
+    # debug filter.
     named_params = [
         (name, p.data)
         for name, p in model.named_parameters()

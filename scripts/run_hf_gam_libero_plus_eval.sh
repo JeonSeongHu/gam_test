@@ -4,9 +4,9 @@ set -euo pipefail
 # Standalone local-GPU LIBERO-Plus rollout eval for
 # SeonghuJeon/3da-libero-gam.
 #
-# This script does not assume Slurm. It launches one Python process per GPU,
-# passes explicit --shard-index/--shard-count values, then aggregates the shard
-# outputs into a suite-level summary.json and per_task.csv.
+# Launches one Python process per GPU, passes explicit
+# --shard-index/--shard-count values, then aggregates the shard outputs into a
+# suite-level summary.json and per_task.csv.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"

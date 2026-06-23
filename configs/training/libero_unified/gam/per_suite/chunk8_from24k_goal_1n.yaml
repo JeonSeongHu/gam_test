@@ -14,7 +14,7 @@
 # (depth signal effectively ignored). New weighting (action 1.45 /
 # feat 0.66 / depth 0.60) lands depth at ~25% so it actually trains.
 # Resume from a 24k ckpt that was trained at lambda_depth=0.05, so
-# expect a one-time loss-magnitude bump at step 24001 — closed-loop SR
+# expect a one-time loss-magnitude bump at step 24001 : closed-loop SR
 # at the next eval (step 25000) is the real proxy for whether the joint
 # action+depth fine-tune is helping.
 #

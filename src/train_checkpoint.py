@@ -178,7 +178,7 @@ def _validate_checkpoint_action_timing(
             )
     if mismatches:
         message = (
-            "Checkpoint action_normalizer timing does not match the current dataset. "
+            "Checkpoint action_normalizer timing mismatches the current dataset. "
             "Pass --refresh-action-stats so q01/q99 are recomputed or loaded for the "
             "current target_hz/random_stride policy-action distribution. "
             + "; ".join(mismatches[:8])
@@ -193,7 +193,7 @@ def load_feature_channel_stats(path, device, expected_dim: int, eps: float = 1e-
         return None
     stats_path = os.path.expanduser(str(path))
     if not os.path.exists(stats_path):
-        raise FileNotFoundError(f"Feature channel stats file not found: {stats_path}")
+        raise FileNotFoundError(f"Feature channel stats file missing: {stats_path}")
     obj = torch.load(stats_path, map_location="cpu")
     if not isinstance(obj, dict):
         raise ValueError(f"Feature channel stats must be a dict, got {type(obj).__name__}.")

@@ -1,4 +1,4 @@
-"""DA3-Giant gam action model — LIBERO / LIBERO-Plus."""
+"""DA3-Giant gam action model : LIBERO / LIBERO-Plus."""
 
 from .da3_giant_encoder import DA3GiantEncoder
 from .action_tokenizer import ActionTokenizer

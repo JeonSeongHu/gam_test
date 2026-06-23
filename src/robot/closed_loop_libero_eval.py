@@ -12,7 +12,7 @@ every eval call. Teacher (frozen) + LIBERO envs are cached across calls in the
 `_EvalState` handle returned to the caller.
 
 Env setup prerequisites (libero / robosuite / mujoco import, per-server
-MUJOCO_GL backend) are validated by `validate_libero_env()` — call once at
+MUJOCO_GL backend) are validated by `validate_libero_env()` : call once at
 training start.
 
 See `docs/closed-loop-eval-env.md` for per-server env configuration.
@@ -221,7 +221,7 @@ def _lazy_eval_libero_unified():
     `eval_libero_unified.py` imports `DA3FineTuneModel` from `train_robot.py`
     which in turn imports this module. Resolve at call time.
     """
-    import eval_libero_unified as _elu  # type: ignore[import-not-found]
+    import eval_libero_unified as _elu  # type: ignore
     return _elu
 
 
@@ -236,15 +236,15 @@ def _install_robosuite_render_make_current_patch() -> None:
     Root cause for libero_object SIGABRT on CSCS GH200 + multi-rank EGL device
     path (jobs 3414942 / 3414943 / 3415490 / 3415548 all hang on rank-local
     mjr_readPixels at binding_utils.py:171 during the 2nd rollout after
-    ENV_RECREATE; explicit MjrContext.free()/GLContext.free() did NOT fix it,
-    so the cleanup ordering hypothesis (M1) is refuted):
+    ENV_RECREATE; explicit MjrContext.free()/GLContext.free() refuted the
+    cleanup-ordering hypothesis (M1):
 
     robosuite's MjRenderContext only calls gl_ctx.make_current() inside
     __init__ (binding_utils.py:79). Subsequent render() / read_pixels() rely
     on the EGL driver keeping the right context current on the calling
     thread. After env.close() + new env build, the NVIDIA EGL device path
-    leaves the per-thread current context in an inconsistent state — the new
-    MjRenderContext.gl_ctx is the active context object in Python, but the
+    leaves the per-thread current context in an inconsistent state : the new
+    MjRenderContext.gl_ctx is the active context object in Python while the
     driver-side current binding can still reference the destroyed previous
     context. The blocking glReadPixels then deadlocks waiting on the stale
     context's framebuffer.
@@ -378,10 +378,11 @@ def _egl_device_display_available(preferred_device_id: int | None = None) -> boo
 def _install_mujoco_glcontext_patch(preferred_device_id: int | None = None) -> None:
     """Replace robosuite GLContext with a Mesa-safe EGL adapter when needed.
 
-    CVLAB1 exposes `EGL_MESA_platform_surfaceless` but not the NVIDIA
-    `EGL_PLATFORM_DEVICE_EXT` path that MuJoCo's stock `mujoco.egl` loader
-    requires. Importing `mujoco` directly under `MUJOCO_GL=egl` therefore dies
-    before robosuite even gets a chance to install its own context.
+    CVLAB1 exposes `EGL_MESA_platform_surfaceless` while the NVIDIA
+    `EGL_PLATFORM_DEVICE_EXT` path required by MuJoCo's stock `mujoco.egl`
+    loader is absent. Importing `mujoco` directly under `MUJOCO_GL=egl`
+    therefore dies before robosuite even gets a chance to install its own
+    context.
 
     Fix: import the core MuJoCo bindings under a neutral backend first. If the
     native EGL device-display path is available, keep robosuite's own NVIDIA
@@ -566,12 +567,12 @@ def validate_libero_env() -> None:
         int(os.environ.get("LOCAL_RANK", os.environ.get("RANK", 0)) or 0)
     )
     # Apply the Mesa GLContext adapter only on hosts where robosuite's own EGL
-    # device path can't initialize. Idempotent — second call is a no-op.
+    # device path can't initialize. Idempotent : second call is a no-op.
     _install_mujoco_glcontext_patch(render_gpu_device_id)
 
     _elu = _lazy_eval_libero_unified()
     # Smoke-test: construct a tiny env via the same factory used at rollout
-    # time. We intentionally DO NOT call env.reset() here — `env.reset()`
+    # time. Skip env.reset() here because it
     # requires a prior `set_init_state(...)` for some LIBERO suites and errors
     # with "Current sensor for observable ... is invalid" when called cold.
     # The real rollout always calls apply_initial_state first so skipping
@@ -588,7 +589,7 @@ def validate_libero_env() -> None:
             camera_depths=False,
         )
         if len(init_states) == 0:
-            raise RuntimeError("LIBERO env produced zero init states — benchmark metadata broken")
+            raise RuntimeError("LIBERO env produced zero init states : benchmark metadata broken")
         _safe_close_env(
             env,
             rank=int(os.environ.get("RANK", os.environ.get("SLURM_PROCID", 0)) or 0),
@@ -621,8 +622,7 @@ class _EvalState:
     policy_info: dict[str, Any] = field(default_factory=dict)
     envs: dict[str, Any] = field(default_factory=dict)  # {suite: env}
     # Hash of module pointers. If the policy is ever rebuilt because modules
-    # changed (shouldn't happen during training, but guard against it), reset
-    # envs too.
+    # changed during training, reset envs too as a defensive guard.
     config_hash: str | None = None
 
 
@@ -800,7 +800,7 @@ def evaluate_closed_loop_libero_from_training(
     Returns: (local_counts, local_videos)
         local_counts: {(suite, task_id): {"success": int, "total": int, "steps": int}}
             counts for ONLY this rank's share. Caller all-reduces across ranks.
-        local_videos: {(suite, task_id): list[np.ndarray]} — first-trial RGB
+        local_videos: {(suite, task_id): list[np.ndarray]} : first-trial RGB
             frame buffers, populated only when `log_video=true` and only on
             rank 0 (other ranks return empty dict). Caller is expected to
             log to wandb directly without all-gathering.
@@ -828,9 +828,8 @@ def evaluate_closed_loop_libero_from_training(
         return {}, {}
 
     # Diagnostic: capture native abort (SIGABRT/SIGSEGV/SIGFPE/SIGBUS/SIGILL)
-    # stack traces from C-level (mujoco/EGL/CUDA) inside this rank's eval. Without
-    # this, native rollout crashes leave only NCCL-watchdog noise and Python
-    # cannot show where in the C stack the abort happened.
+    # stack traces from C-level (mujoco/EGL/CUDA) inside this rank's eval.
+    # This preserves the native crash site before NCCL-watchdog noise dominates.
     try:
         import signal as _signal_diag
         if not faulthandler.is_enabled():
@@ -885,7 +884,7 @@ def evaluate_closed_loop_libero_from_training(
     video_max_per_eval = int(closed_loop_cfg.get("video_max_per_eval", 8))
     # When detailed_video=true, each frame is the policy debug grid
     # (raw obs / policy obs / predicted depth / predicted RGB / action chunks
-    # + live env render). Requires the policy to populate `last_debug` —
+    # + live env render). Requires the policy to populate `last_debug` :
     # which `load_stage1_policy` does for gam Path B. Heavier than
     # plain RGB rollout video; defaults to off for backward compatibility.
     detailed_video = bool(closed_loop_cfg.get("detailed_video", False))
@@ -964,8 +963,7 @@ def evaluate_closed_loop_libero_from_training(
         dummy_ckpt: dict[str, Any] = {
             "config": cfg,
             "train_steps": int(train_steps),
-            # Mark presence of the optional modules so `ckpt.get(...) is not None`
-            # checks in load_stage1_policy pass.
+            # Mark optional module presence so load_stage1_policy preloaded checks pass.
             "future_predictor": (
                 {"__preloaded__": True} if future_predictor is not None else None
             ),
@@ -979,8 +977,7 @@ def evaluate_closed_loop_libero_from_training(
             # assertion; content is unused because preloaded modules skip load.
             "student_da3": {"__preloaded__": True},
             "action_head": {"__preloaded__": True},
-            # action_normalizer/proprio_normalizer: not consumed when preloaded
-            # provides them.
+            # action_normalizer/proprio_normalizer are supplied by preloaded modules.
             "action_normalizer": None,
             "proprio_normalizer": None,
         }
@@ -1287,8 +1284,8 @@ def evaluate_closed_loop_libero_from_training(
             # Record video only on rank 0, only for the first trial of each
             # (suite, task), and only until video_max_per_eval is reached. This
             # keeps render overhead negligible (one render per recorded rollout)
-            # while still giving the user a small but representative reel per
-            # eval call. Other ranks always pass record_video=False.
+            # and gives the user a small representative reel per eval call.
+            # Other ranks always pass record_video=False.
             record_this_video = bool(
                 log_video
                 and rank == 0
@@ -1435,7 +1432,7 @@ def evaluate_closed_loop_libero_from_training(
 # Small throwaway preset object used only for action_horizon resolve. The
 # resolver treats it as a carrier for `preset.action_horizon` and
 # `preset.num_trials_per_task`, neither of which we use here. Lazy-built so the
-# import of eval_libero_unified doesn't happen at module import time.
+# import of eval_libero_unified is deferred past module import time.
 def _make_dummy_preset():
     _elu = _lazy_eval_libero_unified()
     return _elu.ProtocolPreset(
@@ -1465,7 +1462,7 @@ def all_reduce_counts(
     ranks (derived from the shared work list). Returns a dict with global
     counts (every rank receives the same dict after this call).
 
-    Missing keys on a rank are implicitly zero — we union all keys first.
+    Missing keys on a rank are implicitly zero : we union all keys first.
     """
     if not dist.is_available() or not dist.is_initialized() or world_size == 1:
         return {k: dict(v) for k, v in local_counts.items()}
@@ -1807,5 +1804,3 @@ def write_eval_artifacts(
         json.dump(_json_safe(summary), f, indent=2, sort_keys=True)
         f.write("\n")
     return {"summary_path": str(summary_path), "per_task_path": str(per_task_path)}
-
-

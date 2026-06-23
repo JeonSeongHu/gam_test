@@ -226,7 +226,7 @@ class DA3FineTuneModel(nn.Module):
         self.student_da3 = student_da3
         self.action_head = action_head
         self.proprio_head = proprio_head
-        # Kept for checkpoint backward compatibility but no longer used in legacy mode.
+        # Kept for checkpoint backward compatibility; legacy mode ignores it.
         self.proprio_conditioner = proprio_conditioner
         # Unified future-predictor path: if these are set, the training loop
         # calls compute_unified_forward_loss() instead of .forward().
@@ -315,7 +315,7 @@ def _resolve_backbone_action_input_dim(action_head_cfg, embed_dim, *, logger=Non
     if value == 1536:
         if logger is not None:
             logger.warning(
-                "%s=%d does not match selected Stage 1 embed_dim=%d; using embed_dim. "
+                "%s=%d mismatches selected Stage 1 embed_dim=%d; using embed_dim. "
                 "Set input_dim: auto or omit it when switching backbones.",
                 label,
                 value,
@@ -835,10 +835,10 @@ def build_finetune_optimizer(finetune_model, training_cfg):
         param_groups.append({"params": head_params, "lr": base_lr * head_lr_mult})
     if predictor_params:
         param_groups.append({"params": predictor_params, "lr": base_lr * predictor_lr_mult})
-    # `fused=True` collapses per-param launches into a single CUDA kernel —
+    # `fused=True` collapses per-param launches into a single CUDA kernel :
     # ~30-80 ms/step saved on the Grace-Hopper Python overhead path
-    # (pytorch.org "Fused Adam" perf note). Falls back if not supported on the
-    # active device.
+    # (pytorch.org "Fused Adam" perf note). Uses the standard AdamW path on
+    # devices without fused support.
     opt = torch.optim.AdamW(
         param_groups,
         weight_decay=weight_decay,
@@ -892,7 +892,7 @@ def _gather_eval_tensors(preds_list, gts_list, keys_list, world_size, rank, devi
             local_pred = torch.cat([local_pred, local_pred[:1].expand(pad, *local_pred.shape[1:])], dim=0)
             local_gt = torch.cat([local_gt, local_gt[:1].expand(pad, *local_gt.shape[1:])], dim=0)
         else:
-            # This rank has nothing — other ranks must have data, construct placeholder
+            # This rank has nothing : other ranks must have data, construct placeholder
             local_pred = torch.zeros((max_n, *local_pred.shape[1:]) if local_pred.dim() > 1 else (max_n,), device=device)
             local_gt = torch.zeros_like(local_pred)
     pred_shards = [torch.zeros_like(local_pred) for _ in range(world_size)]
@@ -1331,9 +1331,9 @@ def run_da3_finetune_training(args, cfg):
     )
     # Strict temporal-block-causal mask on the DA3 deep stack's global
     # attention. Default OFF so existing checkpoints remain bit-identical.
-    # Enable explicitly when the goal is a strictly causal policy that
-    # doesn't let the deep stack mix predicted future obs back into earlier
-    # action tokens. See _propagate_shallow_with_actions_impl.
+    # Enable explicitly for a strictly causal policy that prevents the deep stack
+    # from mixing predicted future obs back into earlier action tokens. See
+    # _propagate_shallow_with_actions_impl.
     gam_deep_temporal_causal_mask = bool(
         predictor_cfg.get("deep_temporal_causal_mask", False)
     )
@@ -1465,7 +1465,7 @@ def run_da3_finetune_training(args, cfg):
             cfg_lang_dim = int(predictor_cfg.get("language_dim", 768))
             if cfg_lang_dim != text_conditioner.hidden_size:
                 raise ValueError(
-                    f"predictor.language_dim={cfg_lang_dim} does not match "
+                    f"predictor.language_dim={cfg_lang_dim} mismatches "
                     f"TextConditioner({encoder_type=}).hidden_size="
                     f"{text_conditioner.hidden_size}. Set predictor.language_dim "
                     "to the encoder's native hidden size (CLIP-L: 768, "
@@ -1630,7 +1630,7 @@ def run_da3_finetune_training(args, cfg):
         if rank == 0:
             logger.info("DA3_NAN_DEBUG registered %d raw-gradient hooks", len(nan_debug_hook_handles))
 
-    # --- GradScaler: only needed for fp16, not bf16 ---
+    # --- GradScaler: fp16 path only; bf16 skips it ---
     scaler = torch.amp.GradScaler("cuda", enabled=False)
 
     # --- Resume from checkpoint ---
@@ -1752,8 +1752,8 @@ def run_da3_finetune_training(args, cfg):
                 )
         else:
             # DeepSpeed ZeRO partitions optimizer state across ranks: each rank
-            # only has its own shard, so the rank-0-only .pt save cannot be
-            # loaded by opt.load_state_dict on other ranks (KeyError: <rank>).
+            # owns its shard, so the rank-0-only .pt save is incomplete for
+            # opt.load_state_dict on other ranks (KeyError: <rank>).
             # Prefer ds load_checkpoint off the sharded directory written by
             # model_engine.save_checkpoint. Fall back to fresh optimizer when
             # the directory is missing (pre-fix checkpoints).
@@ -1778,11 +1778,11 @@ def run_da3_finetune_training(args, cfg):
                             logger.info("Restored DeepSpeed optimizer state from %s (tag=%s)", ds_ckpt_dir, ds_tag)
                     except Exception as e:
                         if rank == 0:
-                            logger.exception("DeepSpeed load_checkpoint failed (%r) — optimizer will start fresh", e)
+                            logger.exception("DeepSpeed load_checkpoint failed (%r) : optimizer will start fresh", e)
                         if os.environ.get("DA3_STRICT_DEEPSPEED_RESUME", "0") == "1":
                             raise
                 elif rank == 0:
-                    logger.warning("No DeepSpeed checkpoint dir at %s — optimizer will start fresh", ds_tag_dir)
+                    logger.warning("No DeepSpeed checkpoint dir at %s : optimizer will start fresh", ds_tag_dir)
 
             if not ds_ckpt_loaded and not use_deepspeed:
                 if "optimizer" in ckpt and ckpt["optimizer"] is not None and not has_model_change:
@@ -1846,7 +1846,7 @@ def run_da3_finetune_training(args, cfg):
     ema_tracker = None
     # DDP: every rank tracks its own (identical) shadow so closed_loop_eval
     # can swap EMA across all ranks during distributed rollout.  DeepSpeed
-    # ZeRO partitions params, so we keep rank-0-only there — closed_loop_eval
+    # ZeRO partitions params, so we keep rank-0-only there : closed_loop_eval
     # use_ema is unsupported under DeepSpeed.
     if ema_cfg["enabled"] and (not use_deepspeed or rank == 0):
         if use_deepspeed and rank == 0:
@@ -1866,10 +1866,9 @@ def run_da3_finetune_training(args, cfg):
     lazy_eval_dataset = bool(training_cfg.get("lazy_eval_dataset", False))
 
     if eval_only:
-        # Eval-only does not need the full train split.  Building the train
-        # OpenX mixer can dominate wall time because large Arrow tables are
-        # opened on every rank; use the eval split for stats-key discovery and
-        # forward evaluation.
+        # Eval-only uses the eval split for stats-key discovery and forward
+        # evaluation. Building the train OpenX mixer can dominate wall time
+        # because large Arrow tables are opened on every rank.
         eval_dataset, _, eval_loader = create_dataset_and_loader(
             dataset_cfg, training_cfg, use_deepspeed, world_size, rank, is_eval=True
         )
@@ -2013,7 +2012,7 @@ def run_da3_finetune_training(args, cfg):
         )
         if rank == 0:
             logger.info("Loaded action normalizer from checkpoint")
-        # Supplement with stats_dir for datasets not in the checkpoint
+        # Supplement with stats_dir for datasets outside the checkpoint.
         # Same dedup as the from-stats-dir path so checkpoint-baked normalizers
         # don't trigger a spurious "missing" complaint when a single shared key
         # covers multiple specs.
@@ -2217,7 +2216,7 @@ def run_da3_finetune_training(args, cfg):
                         preview,
                     )
                 proprio_normalizer = None
-            # Supplement with stats_dir for datasets not in the checkpoint
+            # Supplement with stats_dir for datasets outside the checkpoint.
             missing = [] if proprio_normalizer is None else [n for n in ds_names if n not in proprio_normalizer.stats_by_key]
             if proprio_normalizer is not None and missing:
                 _stats_dir = dataset_cfg.get("stats_dir") or dataset_cfg.get("action_stats_dir")
@@ -2272,8 +2271,8 @@ def run_da3_finetune_training(args, cfg):
                     )
                 except (ValueError, KeyError) as exc:
                     # Falls through when proprio stats files are missing from an
-                    # otherwise-populated stats_dir (e.g. action stats exist but
-                    # proprio stats have not been computed on this server).
+                    # otherwise-populated stats_dir (e.g. action stats exist while
+                    # proprio stats are absent on this server).
                     if rank == 0:
                         logger.info(
                             "from_stats_dir failed (%s); computing proprio normalizer from dataset "
@@ -2412,7 +2411,7 @@ def run_da3_finetune_training(args, cfg):
             return
         if predictor_type not in {"gam"}:
             raise RuntimeError(
-                f"predictor.type={predictor_type!r} is not supported by unified eval; "
+                f"predictor.type={predictor_type!r} is unsupported by unified eval; "
                 "use gam."
             )
 
@@ -3053,7 +3052,7 @@ def run_da3_finetune_training(args, cfg):
                 else:
                     # Legacy FuturePredictor (v1 / v2 / level0) was removed in
                     # the 2026-04-21 arch-modernize refactor. The factory would
-                    # have already raised, but guard here too.
+                    # have already raised; keep this defensive guard.
                     raise RuntimeError(
                         f"predictor.type={predictor_type!r} is no longer supported. "
                         "Use predictor.type: gam (the factory rejects legacy types)."
@@ -3348,7 +3347,7 @@ def run_da3_finetune_training(args, cfg):
             # often memory-allocator fragmentation: cuMalloc/cuFree latency
             # grows with the free-block count, which dominates per-step time
             # by step ~1000. Explicit empty_cache returns all free blocks to
-            # the driver, briefly pauses but flattens subsequent cost. Only
+            # the driver, briefly pauses, then flattens subsequent cost. Only
             # fires when the training loop is otherwise idle-ish (after
             # optimizer step, before next data fetch).
             cuda_defrag_every = int(os.environ.get("DA3_CUDA_DEFRAG_EVERY", "0"))
@@ -3558,7 +3557,7 @@ def run_da3_finetune_training(args, cfg):
                                 data_wait_last_summary.get("max_real_views", 0)
                             )
                     # `avg_feat` and `regularizer._running_depth` are both
-                    # populated under Path A AND Path B, but they refer to
+                    # populated under Path A AND Path B; they refer to
                     # *different* losses depending on the path:
                     #   Path A: avg_feat = FeatureRegularizer.feature_reg_loss
                     #     (multi-level student vs teacher distillation)
@@ -3936,9 +3935,9 @@ def run_da3_finetune_training(args, cfg):
 
                     try:
                         gt_actions_denorm = action_normalizer.denormalize(gt_actions.detach(), stats_keys=stats_keys)
-                        # Dedicated AE forward pass: force GT action injection (bypass stochastic).
-                        # The training pred_action uses stochastic GT injection (action_input_rate=0.2),
-                        # so it's mostly a noact mix — not a true AE signal for visualization.
+                        # Dedicated AE forward pass: force GT action injection and bypass stochastic
+                        # sampling. Training pred_action uses stochastic GT injection
+                        # (action_input_rate=0.2), so it is mostly a noact visualization mix.
                         with torch.amp.autocast("cuda", dtype=torch.bfloat16, enabled=use_bf16):
                             ae_pred_vis, _, _ = model_ref(
                                 all_views, proprio=proprio,
@@ -3978,11 +3977,11 @@ def run_da3_finetune_training(args, cfg):
                     except Exception as exc:
                         logger.warning("Action trajectory visualization failed: %s", exc)
 
-                    # Camera pose visualization (teacher vs student) — no try/except to surface errors
+                    # Camera pose visualization (teacher vs student). Let errors surface.
                     if regularizer.lambda_camera > 0 or True:  # always log if cam_dec exists
                         with torch.no_grad():
                             if not isinstance(student_feats, list) or len(student_feats) == 0:
-                                raise RuntimeError("student_feats not available for camera vis")
+                                raise RuntimeError("student_feats missing for camera vis")
                             _raw = model_ref.module if hasattr(model_ref, "module") else model_ref
                             s_pose = _raw.student_da3.decode_camera(student_feats)
                             if s_pose is not None:
@@ -4136,10 +4135,9 @@ def run_da3_finetune_training(args, cfg):
                 # Snapshot train/eval mode and per-parameter requires_grad so
                 # we restore cleanly. eval_libero_unified.py:748+ calls
                 # `.requires_grad_(False)` on the passed modules (including
-                # teacher_da3), which is NOT undone by `.train()` — it only
-                # restores the training-mode flag. Without this snapshot, the
-                # next training step's backward dies with "element 0 of
-                # tensors does not require grad and does not have a grad_fn".
+                # teacher_da3). `.train()` restores the training-mode flag while
+                # this snapshot restores per-parameter gradients for the next
+                # backward pass.
                 _prior_mode = _raw_ft.training
                 _raw_grad_snapshot = [
                     (p, p.requires_grad) for p in _raw_ft.parameters()
@@ -4311,22 +4309,21 @@ def run_da3_finetune_training(args, cfg):
                             dist.barrier()
                 except Exception as _e:  # noqa: BLE001
                     logger.exception(
-                        "[step=%07d] closed-loop eval errored: %s — continuing training",
+                        "[step=%07d] closed-loop eval errored: %s : continuing training",
                         train_steps, _e,
                     )
                 finally:
                     # Restore live params before mode/grad toggles so the
                     # next training step backward sees the optimizer-tracked
-                    # tensors, not EMA shadow values.
+                    # live tensors instead of EMA shadow values.
                     if _ema_use and _ema_backup:
                         ema_tracker.restore(_raw_ft, _ema_backup)
                     if _prior_mode:
                         _raw_ft.train()
                     else:
                         _raw_ft.eval()
-                    # Restore per-parameter requires_grad: closed_loop's
-                    # load_stage1_policy() force-freezes the modules and the
-                    # mode toggle above does NOT undo that.
+                    # Restore per-parameter requires_grad after closed_loop's
+                    # load_stage1_policy() force-freezes the modules.
                     for _p, _rg in _raw_grad_snapshot:
                         if _p.requires_grad != _rg:
                             _p.requires_grad_(_rg)
@@ -4334,7 +4331,7 @@ def run_da3_finetune_training(args, cfg):
                         if _p.requires_grad != _rg:
                             _p.requires_grad_(_rg)
                     # The rollout path is wrapped in @torch.no_grad() and may
-                    # also nudge the global grad-enabled flag — force on.
+                    # also nudge the global grad-enabled flag : force on.
                     torch.set_grad_enabled(True)
                     torch.cuda.empty_cache()
             elif predictor_enabled:
@@ -4500,7 +4497,7 @@ def run_da3_finetune_training(args, cfg):
             # Free large tensors to prevent memory accumulation
             del all_views, gt_actions_raw, gt_actions, proprio
             del action_pred, student_raw, total_loss, loss_action, loss_feat
-            # teacher_raw may or may not be defined depending on path; guard.
+            # teacher_raw is path-dependent; guard cleanup.
             try:
                 del teacher_raw
             except NameError:

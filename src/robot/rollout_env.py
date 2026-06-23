@@ -64,7 +64,7 @@ def patch_robosuite_egl_context() -> None:
     if mujoco_gl and mujoco_gl != "egl":
         return
     try:
-        from robosuite.utils import binding_utils  # type: ignore[import-not-found]
+        from robosuite.utils import binding_utils  # type: ignore
     except Exception as exc:  # noqa: BLE001
         logger.warning("Could not patch robosuite EGL context before rollout: %s", exc)
         return
@@ -835,7 +835,7 @@ def _delete_libero_modules() -> None:
 def _missing_optional_dependency(name: str):
     def _raise(*_args, **_kwargs):
         raise RuntimeError(
-            f"LIBERO-Plus optional perturbation dependency '{name}' is not installed. "
+            f"LIBERO-Plus optional perturbation dependency '{name}' is missing. "
             "Install the dependency in a dedicated eval environment if this perturbation is needed."
         )
 
@@ -854,12 +854,9 @@ def _module_available(name: str) -> bool:
 def _prepend_conda_site_packages() -> None:
     """Expose the active conda env's site-packages to non-conda entrypoints.
 
-    Cosmos-Policy runs from a virtualenv, but the host conda env already ships
-    the official LIBERO-Plus `wand` package and ImageMagick runtime. When the
-    virtualenv launches these evaluation helpers directly, we need to add the
-    conda site-packages directory to `sys.path` so the optional LIBERO-Plus
-    motion-blur dependency resolves to the real package instead of the fallback
-    shim.
+    Cosmos-Policy runs from a virtualenv. The host conda env ships the official
+    LIBERO-Plus `wand` package and ImageMagick runtime. Adding conda
+    site-packages to `sys.path` lets motion-blur resolve the real package.
     """
 
     conda_env = os.environ.get("DA3_CONDA_ENV")
@@ -878,10 +875,8 @@ def _preload_conda_magickwand() -> None:
     """Force-load the conda env's MagickWand before LIBERO-Plus imports `wand`.
 
     The official LIBERO-Plus motion-blur path imports `wand.api` at module
-    load time. In this environment the shared object exists in the active conda
-    env, but `wand` can still fail to resolve it unless the process has already
-    loaded the library. Preloading keeps the official dependency path active
-    without changing the LIBERO-Plus behavior.
+    load time. Preloading the active conda env's shared object keeps the
+    official dependency path active with LIBERO-Plus behavior unchanged.
     """
 
     global _MAGICKWAND_PRELOADED
@@ -1128,7 +1123,7 @@ def _activate_libero_plus_source(plus_root: str | os.PathLike[str]) -> Path:
     inner_package = namespace_root / "libero" / "__init__.py"
     if not inner_package.exists():
         raise FileNotFoundError(
-            f"LIBERO-Plus source checkout not found at {root}. "
+            f"LIBERO-Plus source checkout missing at {root}. "
             "Run scripts/setup_libero_plus.sh or set DA3_LIBERO_PLUS_DIR / --plus-root."
         )
 
@@ -1293,7 +1288,7 @@ def _load_libero_plus_init_states(task, get_libero_path) -> np.ndarray:
 
     init_states_path = _libero_plus_init_state_path(task, get_libero_path)
     if not os.path.exists(init_states_path):
-        raise FileNotFoundError(f"LIBERO-Plus init states not found: {init_states_path}")
+        raise FileNotFoundError(f"LIBERO-Plus init states missing: {init_states_path}")
 
     try:
         init_states = torch.load(init_states_path, weights_only=False)
@@ -1323,12 +1318,12 @@ def _resolve_bddl_file(
         candidate_path = os.path.join(bddl_base, problem_folder, candidate_name)
         if os.path.exists(candidate_path):
             # LIBERO-Plus encodes camera, robot-initial-state, and noise
-            # perturbations in synthetic BDDL filenames that do not exist on
-            # disk. Its OffScreenRenderEnv parses the synthetic suffix before
-            # mapping back to the base BDDL, so preserve the full path here.
+            # perturbations in synthetic BDDL filenames. Its OffScreenRenderEnv
+            # parses the suffix before mapping back to the base BDDL, so
+            # preserve the full path here.
             return bddl_path
 
-    raise FileNotFoundError(f"BDDL file not found: {bddl_path}")
+    raise FileNotFoundError(f"BDDL file missing: {bddl_path}")
 
 
 def create_rollout_env_libero(
@@ -1356,7 +1351,7 @@ def create_rollout_env_libero(
     Returns:
         env: RobosuiteRolloutEnv
         task_name: str (human-readable task description)
-        init_states: np.ndarray (N, state_dim) — initial states for rollout episodes
+        init_states: np.ndarray (N, state_dim) : initial states for rollout episodes
     """
     _, get_libero_path, OffScreenRenderEnv = _import_libero_api(plus_root)
     patch_robosuite_egl_context()
@@ -1389,7 +1384,7 @@ def create_rollout_env_libero(
         asset_dir = _find_libero_assets_dir(Path(plus_root).expanduser().resolve())
         if asset_dir is None:
             raise FileNotFoundError(
-                "LIBERO-Plus assets were not found. Download assets.zip from "
+                "LIBERO-Plus assets are missing. Download assets.zip from "
                 "https://huggingface.co/datasets/Sylvest/LIBERO-plus and unzip it to "
                 "<LIBERO-plus>/libero/libero/assets, or set DA3_LIBERO_PLUS_ASSETS_DIR."
             )

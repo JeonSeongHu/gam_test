@@ -60,7 +60,7 @@ class FeatureRegularizer:
         teacher_features: List[torch.Tensor],
     ) -> torch.Tensor:
         if len(student_features) != len(teacher_features):
-            raise ValueError("Student/teacher feature levels do not match.")
+            raise ValueError("Student/teacher feature levels mismatch.")
 
         n_levels = len(student_features)
         loss = student_features[0].new_tensor(0.0)

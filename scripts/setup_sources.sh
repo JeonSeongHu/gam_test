@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Clone + install the source-only dependencies that are not on PyPI:
+# Clone + install the source-only dependencies:
 #   - DA3 backbone  (Depth-Anything-3)  -> ./Depth-Anything-3   (sys.path import)
 #   - LIBERO benchmark                  -> ./LIBERO             (pip install --no-deps)
 #   - LIBERO-Plus  (optional, --plus)   -> ./LIBERO-plus
@@ -19,7 +19,7 @@ echo "[setup_sources] installing source deps under: $ROOT"
 DA3_BACKBONE_COMMIT="${DA3_BACKBONE_COMMIT:-2c21ea849ceec7b469a3e62ea0c0e270afc3281a}"
 LIBERO_PLUS_COMMIT="${LIBERO_PLUS_COMMIT:-4976dc30028e805ff8094b55501d532c48fec182}"
 
-# ---- DA3 backbone: present-on-disk only (da3_giant_encoder adds its src to sys.path) ----
+# ---- DA3 backbone: local source tree for da3_giant_encoder sys.path setup ----
 if [ ! -d Depth-Anything-3/src/depth_anything_3 ]; then
   git clone https://github.com/ByteDance-Seed/Depth-Anything-3.git Depth-Anything-3
   git -C Depth-Anything-3 checkout "$DA3_BACKBONE_COMMIT"
@@ -27,10 +27,10 @@ else
   echo "[setup_sources] Depth-Anything-3 already present, skipping."
 fi
 
-# ---- LIBERO benchmark: used via PYTHONPATH only (NOT pip-installed) ----
+# ---- LIBERO benchmark: PYTHONPATH source checkout ----
 # Put the LIBERO repo ROOT on PYTHONPATH so `import libero.libero.*` resolves.
-# Do NOT add LIBERO/libero (it is a namespace package; adding it makes `import
-# libero` bind to the inner LIBERO/libero/libero and breaks `import libero.libero`).
+# Use the repo root; the inner LIBERO/libero directory is a namespace package
+# and makes `import libero` bind to LIBERO/libero/libero.
 # LIBERO's requirements.txt is ignored (pins old, conflicting versions); its env
 # classes' runtime deps (bddl, easydict, future) come from requirements.txt.
 if [ ! -d LIBERO/libero ]; then
@@ -56,6 +56,6 @@ cat <<EOF
   export DA3_ROOT="$ROOT"
   export DA3_LIBERO_SOURCE_DIR="$ROOT/LIBERO"
   export DA3_LIBERO_PLUS_DIR="$ROOT/LIBERO-plus"
-  export PYTHONPATH="$ROOT/src:$ROOT/LIBERO:\${PYTHONPATH:-}"   # NOT \$ROOT/LIBERO/libero
+  export PYTHONPATH="$ROOT/src:$ROOT/LIBERO:\${PYTHONPATH:-}"   # LIBERO repo root
   export MUJOCO_GL=egl PYOPENGL_PLATFORM=egl
 EOF

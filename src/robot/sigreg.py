@@ -4,14 +4,13 @@ Port from LeJEPA / LeWorldModel (arXiv:2511.08544, arXiv:2603.19312,
 github.com/lucas-maes/le-wm, MIT license).
 
 Key properties (matched to LeWM's `module.py:11-37`):
-- Integration knots `t = linspace(0, max_knot, knots)` — NOT symmetric [-L, L].
-- Gaussian envelope `exp(-t^2 / 2)` — the TARGET CF's modulus.
+- Integration knots `t = linspace(0, max_knot, knots)` on the positive axis.
+- Gaussian envelope `exp(-t^2 / 2)` : the TARGET CF's modulus.
 - Trapezoidal weights over the integration.
-- Random unit directions are re-drawn every forward — Cramer-Wold randomization.
+- Random unit directions are re-drawn every forward : Cramer-Wold randomization.
 - No whitening inside the loss (the upstream BN-MLP projector does it).
 - Scale statistic by sample count (makes the numeric scale O(1) regardless of batch).
-- Outer loss coefficient (commonly λ=0.09 in LeWM) is applied AT THE CALL SITE,
-  not as a kernel-bandwidth parameter inside this module.
+- Outer loss coefficient (commonly λ=0.09 in LeWM) is applied at the call site.
 
 Usage:
     sigreg = SIGReg(d_model=1024, n_projections=1024, knots=17, max_knot=3.0)
@@ -35,8 +34,7 @@ class SIGReg(nn.Module):
             LeWM uses 3.0 (beyond 3 standard deviations the Gaussian
             envelope is numerically zero).
         redraw: if True (recommended), sample new random directions every
-            forward. If False, use a fixed buffer (reproducible but defeats
-            Cramer-Wold sketching randomness).
+            forward. If False, use a fixed reproducible buffer.
     """
 
     def __init__(
@@ -83,8 +81,7 @@ class SIGReg(nn.Module):
 
         Args:
             z: (N, d_model) OR (B, N, d_model); leading dims are flattened.
-                **The caller is responsible for passing z from the BN-MLP
-                projector** — this module does not whiten internally.
+                **The caller supplies z from the BN-MLP projector**.
             mask: optional (N,) bool tensor selecting rows (True = keep).
 
         Returns:

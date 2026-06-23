@@ -143,7 +143,7 @@ class BatchedPolicyDispatcher:
     def _loop(self) -> None:
         predict_batch = getattr(self.policy, "predict_batch", None)
         if not callable(predict_batch):
-            raise RuntimeError("Policy does not expose predict_batch().")
+            raise RuntimeError("Policy lacks predict_batch().")
         while True:
             first = self._queue.get()
             if first is None:
@@ -823,11 +823,11 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.wandb:
-        raise ValueError("Batched eval is intentionally W&B-free; do not pass --wandb.")
+        raise ValueError("Batched eval is intentionally W&B-free; omit --wandb.")
     if args.record_video or args.detailed_video or args.decode_visuals:
-        raise ValueError("Batched eval is a throughput path; video/decode diagnostics are not supported.")
+        raise ValueError("Batched eval is a throughput path; video/decode diagnostics are unsupported.")
     if args.temporal_ensemble:
-        raise ValueError("Batched eval does not support --temporal-ensemble yet.")
+        raise ValueError("Batched eval currently lacks --temporal-ensemble support.")
     if args.execution_strategy != "default":
         raise ValueError("Batched eval currently supports --execution-strategy default only.")
 
@@ -885,7 +885,7 @@ def main() -> None:
         ckpt = torch.load(args.ckpt, map_location="cpu", weights_only=False)
         policy, policy_info = elu.load_policy(args, cfg, ckpt, device)
         if not callable(getattr(policy, "predict_batch", None)):
-            raise RuntimeError("Loaded policy does not expose predict_batch().")
+            raise RuntimeError("Loaded policy lacks predict_batch().")
     rollout_action_frame = elu.resolve_rollout_action_frame(args.action_frame, policy_info)
     policy_info["rollout_action_frame"] = rollout_action_frame
     action_horizon, action_horizon_requested = elu.resolve_action_horizon(

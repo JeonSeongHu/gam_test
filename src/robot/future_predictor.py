@@ -1,4 +1,4 @@
-"""GAMFuturePredictor — modernized dense block-autoregressive predictor.
+"""GAMFuturePredictor : modernized dense block-autoregressive predictor.
 
 Revision 2026-04-21 (commit: feature/gam-arch-modernize)
 -------------------------------------------------------------
@@ -9,7 +9,7 @@ Architectural changes vs the previous implementation:
 - LayerNorm + AdaLN-Zero removed. Blocks are now plain pre-norm transformers
   with RMSNorm + SwiGLU + LayerScale (ViT-22B / DINOv3 / DiT-3 convention).
   AdaLN had nothing to modulate once proprio was already present as an
-  in-sequence token (Path 1) — the mean-collapsed `cond_proj` path (Path 2)
+  in-sequence token (Path 1) : the mean-collapsed `cond_proj` path (Path 2)
   was redundant and temporally lossy, so it was dropped entirely.
 - Q/K RMSNorm inside attention ("QK-norm"). Eliminates the bf16 logit
   explosion that the old code papered over with `attention_fp32=True`
@@ -184,14 +184,14 @@ class LanguageFiLM(nn.Module):
         if visual_token_mask.shape[0] != x.shape[1]:
             raise ValueError(
                 f"visual_token_mask length {visual_token_mask.shape[0]} "
-                f"does not match sequence length {x.shape[1]}."
+                f"mismatches sequence length {x.shape[1]}."
             )
         mask = visual_token_mask.to(device=x.device, dtype=torch.bool).view(1, -1, 1)
         return torch.where(mask, modulated, x)
 
 
 # -----------------------------------------------------------------------------
-# RoPE — 4D axial for visual patches, 1D timestep for single-slot tokens
+# RoPE : 4D axial for visual patches, 1D timestep for single-slot tokens
 # -----------------------------------------------------------------------------
 
 
@@ -228,7 +228,7 @@ class ShallowRoPE(nn.Module):
 
     The `v` axis covers camera ids plus two reserved "virtual views" so that
     the proprio and action-history tokens have distinct v-axis RoPE offsets
-    from the real cameras. Same (t, v, y, x) across tokens is allowed — RoPE
+    from the real cameras. Same (t, v, y, x) across tokens is allowed : RoPE
     only encodes *relative* position; identity is still carried by the
     token's learned transform path.
     """
@@ -348,7 +348,7 @@ class ShallowRoPE(nn.Module):
         Cache key uses the full positions tensor's data_ptr + shape + device
         + dtype. Since `build_positions` always returns the same tensor
         instance for a given (H, V, grid) call, the data_ptr changes only
-        when the caller rebuilds positions — which is exactly when we want
+        when the caller rebuilds positions : which is exactly when we want
         a cache miss.
         """
         key = (positions.data_ptr(), positions.shape[0], positions.device, dtype)
@@ -429,7 +429,7 @@ class QKNormAttention(nn.Module):
 
     QK-norm stabilizes bf16 attention at long sequences and removes the need
     for the `attention_fp32` autocast-disable workaround. Follows DiT-3 /
-    SD3 / ViT-22B convention — learnable scale on Q and K after the dot-
+    SD3 / ViT-22B convention : learnable scale on Q and K after the dot-
     product projection, before SDPA.
     """
 
@@ -462,7 +462,7 @@ class QKNormAttention(nn.Module):
         When `past_kv=(K_past, V_past)` is provided, `x` is treated as NEW
         tokens only; Q/K/V are computed on new tokens, then K/V are concatenated
         with cached (K_past, V_past) along the sequence dim. SDPA sees the full
-        K/V but Q only for new tokens — complexity drops from O(L_total^2) to
+        K/V with Q only for new tokens: complexity drops from O(L_total^2) to
         O(L_new × L_total). Because the new timestep block is the LATEST in
         block-causal order, it attends to all past + all within-block tokens,
         so `attn_mask`/`flex_block_mask` are ignored in cache mode.
@@ -479,7 +479,7 @@ class QKNormAttention(nn.Module):
         q = self.q_norm(q)
         k = self.k_norm(k)
 
-        # Rotary — applied to NEW q,k only; past K already has RoPE applied.
+        # Rotary : applied to NEW q,k only; past K already has RoPE applied.
         if rope is not None and rope_positions is not None:
             q, k = rope.apply_rope(q, k, rope_positions)
 
@@ -492,7 +492,7 @@ class QKNormAttention(nn.Module):
             k_past, v_past = past_kv
             k_full = torch.cat([k_past, k], dim=2)
             v_full = torch.cat([v_past, v], dim=2)
-            # Cache mode: new block attends to past + self fully — no mask.
+            # Cache mode: new block attends to past + self fully : no mask.
             out = F.scaled_dot_product_attention(q, k_full, v_full, attn_mask=None)
             new_kv = (k_full, v_full)
         else:
@@ -754,7 +754,7 @@ class PlainTextCrossBlock(nn.Module):
 
 
 # -----------------------------------------------------------------------------
-# Input projector — unchanged from prior revision (BN for SIGReg compatibility).
+# Input projector : unchanged from prior revision (BN for SIGReg compatibility).
 # -----------------------------------------------------------------------------
 
 
@@ -765,7 +765,7 @@ class BNMLPProjector(nn.Module):
     last layer breaks SIGReg's anti-collapse property. BN aggregates per-
     channel statistics over all tokens in the batch and keeps that property.
 
-    Trade-off: BN has a *systematic* train/eval mismatch — `model.train()`
+    Trade-off: BN has a *systematic* train/eval mismatch : `model.train()`
     normalizes by batch statistics, `model.eval()` by running stats. With
     BF16 forward and a closed-loop rollout that runs single-env (effective
     batch=1), this mismatch is one of the channels through which BF16
@@ -806,7 +806,7 @@ class LNMLPProjector(nn.Module):
     """LayerNorm + 2-layer MLP from DA3 space (d_in) to predictor space (d_model).
 
     Mode-invariant alternative to `BNMLPProjector`. Per-token normalization
-    over the channel dim — no train/eval mode mismatch, no batch-size
+    over the channel dim : no train/eval mode mismatch, no batch-size
     sensitivity, no running stats to manage. Default in current configs.
 
     Don't pair with non-zero `lambda_sigreg`: per LeWM (arXiv 2603.19312 §3.1),
@@ -825,7 +825,7 @@ class LNMLPProjector(nn.Module):
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # LayerNorm is dtype-aware via PyTorch's autocast — no manual cast
+        # LayerNorm is dtype-aware via PyTorch's autocast : no manual cast
         # required because the operation reduces over the channel dim and
         # LayerNorm parameters take the surrounding autocast dtype.
         return self.mlp(self.norm(x))
@@ -900,7 +900,7 @@ class GAMFuturePredictor(nn.Module):
         side = int(round(math.sqrt(self.num_patches_per_view)))
         if side * side != self.num_patches_per_view:
             raise ValueError(
-                f"num_patches_per_view={self.num_patches_per_view} is not a square; "
+                f"num_patches_per_view={self.num_patches_per_view} must be square; "
                 "ShallowRoPE requires a square (H, W) patch grid."
             )
         self.grid_h = side
@@ -950,7 +950,7 @@ class GAMFuturePredictor(nn.Module):
         # --- Token identity: learned modality/type offsets ---
         # RoPE gives relative position; identity of visual-patch vs CLS vs
         # proprio vs prev-action is still needed. We keep a tiny per-token-
-        # type additive embedding (no temporal / view component — RoPE handles
+        # type additive embedding (no temporal / view component : RoPE handles
         # that axis).
         # Slot types: 0 = CLS, 1 = register, 2 = patch, 3 = proprio, 4 = prev_action
         self.type_embed = nn.Parameter(torch.zeros(5, d_model))
@@ -1022,8 +1022,8 @@ class GAMFuturePredictor(nn.Module):
         self.future_proprio_proj = nn.Linear(d_model, proprio_dim, bias=True)
 
         # Small-std init so outputs are non-degenerate from step 0; residuals
-        # are already zero-inert via LayerScale, so the head itself must not
-        # be zero or gradient flow through it stalls.
+        # are already zero-inert via LayerScale, so the head needs nonzero
+        # values for gradient flow.
         nn.init.normal_(self.future_visual_proj.weight, std=0.02)
         nn.init.zeros_(self.future_visual_proj.bias)
         nn.init.normal_(self.action_proj.weight, std=0.02)
@@ -1049,7 +1049,7 @@ class GAMFuturePredictor(nn.Module):
 
     def _embed_language(self, lang_feats: torch.Tensor) -> torch.Tensor:
         if self.lang_proj is None:
-            raise RuntimeError("use_language=False — can't embed language")
+            raise RuntimeError("use_language=False : can't embed language")
         x = self.lang_proj(lang_feats)
         x = x + self.lang_pos.unsqueeze(0).to(dtype=x.dtype)
         return x
@@ -1078,7 +1078,7 @@ class GAMFuturePredictor(nn.Module):
             keep = torch.cat([keep, pad], dim=1)
         if keep.shape[0] != batch_size:
             raise ValueError(
-                f"Language padding mask batch {keep.shape[0]} does not match predictor batch {batch_size}."
+                f"Language padding mask batch {keep.shape[0]} mismatches predictor batch {batch_size}."
             )
         empty_rows = ~keep.any(dim=1)
         if empty_rows.any():
@@ -1098,10 +1098,10 @@ class GAMFuturePredictor(nn.Module):
 
         Unlike concat/cross-attn, this path intentionally skips learned
         language position embeddings: FiLM should get one task-level language
-        vector, not a sequence-position-specific token representation.
+        vector rather than a sequence-position-specific token representation.
         """
         if self.lang_proj is None:
-            raise RuntimeError("use_language=False — can't pool language for FiLM")
+            raise RuntimeError("use_language=False : can't pool language for FiLM")
         lang_tokens = self.lang_proj(
             lang_feats.to(device=device, dtype=self.lang_proj.weight.dtype)
         ).to(dtype=dtype)
@@ -1138,11 +1138,11 @@ class GAMFuturePredictor(nn.Module):
             raise ValueError(f"Expected proprio_history as (B,H,D), got {tuple(proprio_history.shape)}.")
         if proprio_history.shape[0] != batch_size:
             raise ValueError(
-                f"proprio_history batch {proprio_history.shape[0]} does not match predictor batch {batch_size}."
+                f"proprio_history batch {proprio_history.shape[0]} mismatches predictor batch {batch_size}."
             )
         if proprio_history.shape[-1] != self.proprio_dim:
             raise ValueError(
-                f"proprio_history dim {proprio_history.shape[-1]} does not match proprio_dim={self.proprio_dim}."
+                f"proprio_history dim {proprio_history.shape[-1]} mismatches proprio_dim={self.proprio_dim}."
             )
         if proprio_history.shape[1] > H:
             proprio_history = proprio_history[:, -H:]
@@ -1169,7 +1169,7 @@ class GAMFuturePredictor(nn.Module):
             raise ValueError("GAMFuturePredictor requires aligned past_action_history.")
         if past_action_history.shape[0] != batch_size:
             raise ValueError(
-                f"past_action_history batch {past_action_history.shape[0]} does not match predictor batch {batch_size}."
+                f"past_action_history batch {past_action_history.shape[0]} mismatches predictor batch {batch_size}."
             )
         if past_action_history.ndim < 3:
             raise ValueError(
@@ -1189,7 +1189,7 @@ class GAMFuturePredictor(nn.Module):
         flat = past_action_history.reshape(batch_size, H, -1)
         if flat.shape[-1] != self.action_history_dim:
             raise ValueError(
-                f"past_action_history flattened dim {flat.shape[-1]} does not match "
+                f"past_action_history flattened dim {flat.shape[-1]} mismatches "
                 f"action_history_dim={self.action_history_dim}."
             )
         proj_dtype = next(self.action_history_proj.parameters()).dtype
@@ -1400,7 +1400,7 @@ class GAMFuturePredictor(nn.Module):
         b, H, V, P, d = past_visual_tokens.shape
         if P != self.visual_tokens_per_view or d != self.d_da3:
             raise ValueError(
-                f"past_visual_tokens shape {tuple(past_visual_tokens.shape)} does not match "
+                f"past_visual_tokens shape {tuple(past_visual_tokens.shape)} mismatches "
                 f"(B, H, V, {self.visual_tokens_per_view}, {self.d_da3})."
             )
         device = past_visual_tokens.device
@@ -1410,7 +1410,7 @@ class GAMFuturePredictor(nn.Module):
             view_keep = view_valid_mask.to(device=device, dtype=torch.bool)
             if view_keep.shape != (b, H, V):
                 raise ValueError(
-                    f"view_valid_mask shape {tuple(view_keep.shape)} does not match "
+                    f"view_valid_mask shape {tuple(view_keep.shape)} mismatches "
                     f"(B,H,V)=({b},{H},{V})."
                 )
             if not bool(view_keep.any(dim=2).all().item()):
@@ -1449,14 +1449,14 @@ class GAMFuturePredictor(nn.Module):
             valid = context_valid_mask.to(device=device, dtype=torch.bool)
             if valid.shape != (b, H):
                 raise ValueError(
-                    f"context_valid_mask shape {tuple(valid.shape)} does not match (B,H)=({b},{H})."
+                    f"context_valid_mask shape {tuple(valid.shape)} mismatches (B,H)=({b},{H})."
                 )
             step_blocks = step_blocks * valid[:, :, None, None].to(dtype=step_blocks.dtype)
         x = step_blocks.reshape(b, -1, self.d_model)
         x = self._apply_sequence_keep(x, step_token_keep_mask)
         L_total = x.shape[1]
 
-        # 4. Positions for RoPE (once per H/V) — step token positions.
+        # 4. Positions for RoPE (once per H/V) : step token positions.
         step_rope_positions = self.rope.build_positions(
             H=H, V=V,
             num_patches=self.num_patches_per_view,
@@ -1535,8 +1535,8 @@ class GAMFuturePredictor(nn.Module):
             sequence_keep_mask = step_token_keep_mask
 
         if sequence_keep_mask is not None and not bool(sequence_keep_mask.all().item()):
-            # Batch-specific padded-view masks cannot be represented by the
-            # cached flex BlockMask, so use SDPA with an explicit key mask.
+            # Batch-specific padded-view masks require SDPA with an explicit key
+            # mask because the cached flex BlockMask is shape-only.
             flex_block_mask = None
             dense_mask = self._merge_key_keep_mask(dense_mask, sequence_keep_mask)
 
@@ -1636,7 +1636,8 @@ class GAMFuturePredictor(nn.Module):
         action_history_h = x[:, :, V * P + 1]
 
         # 9. Pre-norm output heads. Action token comes from the *dedicated
-        #    action slot* hidden (action_history_h), not the visual CLS — DA3
+        #    action slot* hidden (action_history_h), separate from visual CLS.
+        #    DA3
         #    blocks 13+ expect a single per-timestep action token, so we pre-
         #    norm once per timestep and then repeat across views to seed DA3's
         #    per-view action-token insertion contract.
@@ -1754,7 +1755,7 @@ class GAMFuturePredictor(nn.Module):
         past_kvs=None for iteration 0 where x contains all observed frames,
         then subsequent calls feed ONE new step each).
 
-        Returns dict mirroring `forward`'s outputs PLUS `new_past_kvs` — a list
+        Returns dict mirroring `forward`'s outputs PLUS `new_past_kvs` : a list
         of (K, V) tuples, one per transformer layer, to feed back on next call.
         """
         b, H_new, V, P, d = new_visual_tokens.shape
