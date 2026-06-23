@@ -4222,7 +4222,12 @@ def load_policy(args: argparse.Namespace, cfg: Any, ckpt: dict[str, Any], device
         if OmegaConf.is_config(ckpt_cfg):
             ckpt_cfg = OmegaConf.to_container(ckpt_cfg, resolve=True)
         if isinstance(ckpt_cfg, dict):
+            ckpt_predictor = ckpt_cfg.get("predictor")
+            if isinstance(ckpt_predictor, dict):
+                ckpt_predictor["type"] = "gam"
             cfg = OmegaConf.merge(cfg, OmegaConf.create(ckpt_cfg))
+            if getattr(cfg, "predictor", None) is not None:
+                cfg.predictor.type = "gam"
             stage1_cfg_source = "checkpoint+cli_fallback"
     return load_stage1_policy(
         cfg=cfg,
