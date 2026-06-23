@@ -1,11 +1,13 @@
-# DA3-Giant GAM-AR — LIBERO / LIBERO-Plus
+# GAM: Geometric Action Model — LIBERO / LIBERO-Plus
 
-A single-stage **world-action model** for robot manipulation built on
-**DA3 (Depth Anything 3)**. Blocks 0–12 of DA3-Giant act as a frozen per-view
-encoder; a **`GAMFuturePredictor`** (a dense block-autoregressive
-transformer) sits at block 12 and predicts next-step visual / proprio / action
-tokens; DA3 blocks 13–39 then consume the predicted sequence and emit action
-tokens that an MLP action head turns into robot actions.
+This repository is the public implementation of **GAM (Geometric Action
+Model)** for LIBERO robot manipulation. GAM is a single-stage **world-action
+model** built on **DA3 (Depth Anything 3)**: blocks 0–12 of DA3-Giant act as a
+frozen per-view geometric encoder; a **`GAMFuturePredictor`** (dense
+block-autoregressive transformer) sits at block 12 and predicts next-step
+visual / proprio / action tokens; DA3 blocks 13–39 then consume the predicted
+sequence and emit action tokens that an MLP action head turns into robot
+actions.
 
 This repository contains **only** the DA3-Giant `gam` code. Training is on
 **LIBERO** (HDF5 demos); evaluation is closed-loop in simulation on **LIBERO** and
@@ -33,6 +35,7 @@ Losses (compute_gam_forward_loss): action L1 + future-feature distillation
 |------|---------|
 | `src/train_robot.py` | Training entry (`run_da3_finetune_training`) |
 | `src/eval_libero_unified.py` | LIBERO / LIBERO-Plus closed-loop + open-loop eval |
+| `scripts/run_hf_pointtrack_libero_plus_eval.sh` | Standalone local-GPU LIBERO-Plus eval for the public HF checkpoints |
 | `src/robot/future_predictor.py` | `GAMFuturePredictor` |
 | `src/robot/unified_loss.py` | `compute_gam_forward_loss` |
 | `src/robot/da3_giant_encoder.py` | DA3-Giant backbone + action-token injection + depth/camera decode |
@@ -44,7 +47,7 @@ Losses (compute_gam_forward_loss): action L1 + future-feature distillation
 
 ## Setup
 
-Reproducible from scratch — pick **one** of the three. All install the identical
+Reproducible from scratch on a normal CUDA GPU server — pick **one** of the three. All install the identical
 pinned package set (see `requirements.txt`). The validated reference environment is
 Python 3.12 + a torch 2.8 GH200 build; the pins are public and work on torch ≥ 2.5.
 
@@ -108,6 +111,27 @@ $DA3_ROOT/
 - **LIBERO HDF5 demos** — the replayed no-op LIBERO HDF5s. **GT depth is embedded inside these HDF5s** (`obs/agentview_depth`, `obs/eye_in_hand_depth`); configs set `gt_depth_root: null` and the loader reads depth directly from the HDF5 — there is **no external depth sidecar**.
 - **LIBERO-Plus (eval only)** — perturbed-task benchmark from source (`sylvestf/LIBERO-plus`), used by `eval_libero_unified.py --plus` (simulator rollout). Not a training dataset.
 
+## Public HF checkpoints
+
+The standalone LIBERO-Plus rollout checkpoint set is hosted at:
+
+```bash
+hf download SeonghuJeon/3da-libero-pointtrack-lw0-best \
+  --local-dir checkpoints_hf/3da-libero-pointtrack-lw0-best
+```
+
+Expected layout:
+
+| Suite key | LIBERO suite | Checkpoint | Config |
+|-----------|--------------|------------|--------|
+| `spatial` | `libero_spatial` | `spatial/0084000.pt` | `spatial/config.yaml` |
+| `object` | `libero_object` | `object/0022000.pt` | `object/config.yaml` |
+| `goal` | `libero_goal` | `goal/0068500.pt` | `goal/config.yaml` |
+| `long` | `libero_10` | `long/0091500.pt` | `long/config.yaml` |
+
+These are GAM checkpoints with `predictor.enabled: true` and
+`predictor.type: gam`.
+
 ## Train
 
 ```bash
@@ -141,6 +165,62 @@ PYTHONPATH=src:$PYTHONPATH python src/eval_libero_unified.py \
 ```
 
 `scripts/run_libero_eval.sh` and `scripts/run_libero_batched_eval.py` are convenience launchers.
+
+## Standalone LIBERO-Plus eval on local GPUs
+
+The public standalone path does **not** assume Slurm or any cluster scheduler.
+Run one process per GPU, shard with explicit `--shard-index` / `--shard-count`,
+and keep LIBERO-Plus robot initialization in the official original-qpos mode.
+
+The wrapper below does that and aggregates shard outputs into one suite-level
+`summary.json` and `per_task.csv`:
+
+```bash
+# One suite on four local GPUs.
+GAM_EVAL_GPUS=0,1,2,3 \
+scripts/run_hf_pointtrack_libero_plus_eval.sh spatial
+
+# Other suites.
+GAM_EVAL_GPUS=0,1,2,3 scripts/run_hf_pointtrack_libero_plus_eval.sh object
+GAM_EVAL_GPUS=0,1,2,3 scripts/run_hf_pointtrack_libero_plus_eval.sh goal
+GAM_EVAL_GPUS=0,1,2,3 scripts/run_hf_pointtrack_libero_plus_eval.sh long
+
+# Sequentially run all four suites.
+GAM_EVAL_GPUS=0,1,2,3 scripts/run_hf_pointtrack_libero_plus_eval.sh all
+```
+
+Default protocol:
+
+- `--plus`
+- `--plus-perturbation all`
+- `--plus-official-category all`
+- `--num-trials-per-task 1`
+- `--libero-plus-robot-init-qpos-mode original`
+- `--history-horizon 1`
+- `--rollout-decode-horizon 1`
+- `--action-horizon 1`
+- `--action-repeat 1`
+- `--action-repeat-mode split_delta`
+- `--camera-size 256`
+- `--parallel-envs 16`
+- `--max-batch-size 16`
+- `--env-process-isolation`
+
+`--libero-plus-robot-init-qpos-mode original` is intentional: LIBERO-Plus
+rollout should use the original benchmark robot init qpos instead of a
+DA3-specific qpos-preserve override.
+
+The full LIBERO-Plus suite contains 10,030 one-trial episodes:
+
+| Suite | Episodes |
+|-------|---------:|
+| `libero_spatial` | 2,402 |
+| `libero_object` | 2,518 |
+| `libero_goal` | 2,591 |
+| `libero_10` | 2,519 |
+
+Cluster schedulers can wrap the same script, but the eval path itself is just
+local CUDA processes plus explicit shards.
 
 ## Notes
 - Checkpoints saved under `torch.compile` carry an `_orig_mod.` prefix; the loader strips it.
