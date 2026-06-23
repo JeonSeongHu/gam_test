@@ -6,7 +6,7 @@
 #
 # Python 3.12 + torch from the cu124 wheel index matches the validated reference
 # environment (CSCS GH200, Python 3.12). The Docker image (recommended) pins the
-# identical package set on a torch 2.5.1 base : see Dockerfile.
+# identical package set on a torch 2.5.1 base; see Dockerfile.
 name: da3-libero
 channels:
   - conda-forge
@@ -14,12 +14,13 @@ dependencies:
   - python=3.12
   - pip>=24
   - ffmpeg          # video encode/decode for rollout artifacts
+  - imagemagick     # LIBERO-Plus motion-blur perturbations via Wand
   # System GL libs for headless MuJoCo rendering (LIBERO closed-loop eval).
   # With an NVIDIA driver, set MUJOCO_GL=egl (uses the system EGL); mesalib
   # provides an OSMesa software fallback (MUJOCO_GL=osmesa).
   - mesalib
   - pip:
-      # torch with CUDA : adjust the index for your platform (CPU/ROCm/aarch64).
+      # torch with CUDA; adjust the index for your platform (CPU/ROCm/aarch64).
       - --extra-index-url https://download.pytorch.org/whl/cu124
       - -r requirements.txt
 # After `conda env create` + `scripts/setup_sources.sh`, set per shell:

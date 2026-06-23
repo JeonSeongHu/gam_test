@@ -6,7 +6,6 @@ import contextlib
 import ctypes
 import ctypes.util
 import faulthandler
-import importlib.util
 import io
 import json
 import logging
@@ -14,7 +13,6 @@ import multiprocessing as mp
 import os
 import re
 import signal
-import subprocess
 import sys
 import time
 import traceback
@@ -27,7 +25,6 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 _ROBOSUITE_EGL_CONTEXT_PATCHED = False
-_MAGICKWAND_PRELOADED = False
 
 
 def _env_flag(name: str, default: bool) -> bool:
@@ -832,222 +829,23 @@ def _delete_libero_modules() -> None:
             del sys.modules[module_name]
 
 
-def _missing_optional_dependency(name: str):
-    def _raise(*_args, **_kwargs):
+def _validate_libero_plus_dependencies() -> None:
+    """Validate LIBERO-Plus import-time dependencies from the active env."""
+    missing: list[str] = []
+    for module_name, package_hint in (
+        ("gym", "gym"),
+        ("wand.image", "wand + ImageMagick"),
+        ("skimage.filters", "scikit-image"),
+    ):
+        try:
+            __import__(module_name)
+        except Exception as exc:  # noqa: BLE001
+            missing.append(f"{package_hint} ({exc})")
+    if missing:
         raise RuntimeError(
-            f"LIBERO-Plus optional perturbation dependency '{name}' is missing. "
-            "Install the dependency in a dedicated eval environment if this perturbation is needed."
+            "LIBERO-Plus perturbation dependencies are missing from the active "
+            "Docker/conda environment: " + "; ".join(missing)
         )
-
-    return _raise
-
-
-def _module_available(name: str) -> bool:
-    if name in sys.modules:
-        return True
-    try:
-        return importlib.util.find_spec(name) is not None
-    except (ImportError, ValueError):
-        return True
-
-
-def _prepend_conda_site_packages() -> None:
-    """Expose the active conda env's site-packages to non-conda entrypoints.
-
-    Cosmos-Policy runs from a virtualenv. The host conda env ships the official
-    LIBERO-Plus `wand` package and ImageMagick runtime. Adding conda
-    site-packages to `sys.path` lets motion-blur resolve the real package.
-    """
-
-    conda_env = os.environ.get("DA3_CONDA_ENV")
-    if not conda_env:
-        return
-    base = Path(conda_env)
-    for candidate in base.glob("lib/python*/site-packages"):
-        if candidate.is_dir():
-            candidate_str = str(candidate)
-            if candidate_str not in sys.path:
-                sys.path.append(candidate_str)
-            return
-
-
-def _preload_conda_magickwand() -> None:
-    """Force-load the conda env's MagickWand before LIBERO-Plus imports `wand`.
-
-    The official LIBERO-Plus motion-blur path imports `wand.api` at module
-    load time. Preloading the active conda env's shared object keeps the
-    official dependency path active with LIBERO-Plus behavior unchanged.
-    """
-
-    global _MAGICKWAND_PRELOADED
-    if _MAGICKWAND_PRELOADED:
-        return
-
-    conda_env = os.environ.get("DA3_CONDA_ENV")
-    if not conda_env:
-        return
-
-    base = Path(conda_env)
-    lib_dir = base / "lib"
-    # Load the image-codec dependencies first. If the process accidentally
-    # resolves a system `libjpeg` before the conda copy, MagickWand can fail
-    # with an undefined-symbol error when `libtiff` is loaded transitively.
-    dependency_candidates = [
-        lib_dir / "libjpeg.so.8",
-        lib_dir / "libtiff.so.6",
-        lib_dir / "libpng16.so.16",
-        lib_dir / "libfreetype.so.6",
-    ]
-    for dependency in dependency_candidates:
-        if not dependency.exists():
-            continue
-        try:
-            ctypes.CDLL(str(dependency), mode=ctypes.RTLD_GLOBAL)
-        except OSError as exc:  # noqa: BLE001
-            logger.debug("Could not preload MagickWand dependency from %s: %s", dependency, exc)
-    candidates = [
-        lib_dir / "libMagickWand-7.Q16HDRI.so.10",
-        lib_dir / "libMagickWand-7.Q16HDRI.so",
-        lib_dir / "libMagickWand.so",
-    ]
-    for candidate in candidates:
-        if not candidate.exists():
-            continue
-        try:
-            ctypes.CDLL(str(candidate), mode=ctypes.RTLD_GLOBAL)
-            _MAGICKWAND_PRELOADED = True
-            return
-        except OSError as exc:  # noqa: BLE001
-            logger.debug("Could not preload MagickWand from %s: %s", candidate, exc)
-
-
-def _imagemagick_binary() -> str | None:
-    candidates: list[Path] = []
-    local_root = os.environ.get("DA3_LOCAL_IMAGEMAGICK")
-    if local_root:
-        base = Path(local_root)
-        candidates.extend([base / "conda" / "bin" / "magick", base / "bin" / "magick"])
-    for path_dir in os.environ.get("PATH", "").split(os.pathsep):
-        if path_dir:
-            candidates.append(Path(path_dir) / "magick")
-    for candidate in candidates:
-        if candidate.is_file() and os.access(candidate, os.X_OK):
-            return str(candidate)
-    return None
-
-
-class _ImageMagickCliImage:
-    def __init__(self, *args, blob: bytes | None = None, **_kwargs) -> None:
-        if blob is None:
-            raise TypeError("ImageMagick CLI shim requires blob=... input")
-        self._blob = bytes(blob)
-        self.wand = self
-
-    def make_blob(self, *_args, **_kwargs) -> bytes:
-        return self._blob
-
-    def _motion_blur(self, radius: float, sigma: float, angle: float) -> None:
-        magick = _imagemagick_binary()
-        if magick is None:
-            raise RuntimeError(
-                "LIBERO-Plus motion-blur perturbations require ImageMagick; "
-                "set DA3_LOCAL_IMAGEMAGICK or put `magick` on PATH."
-            )
-        geometry = f"{float(radius):g}x{float(sigma):g}+{float(angle):g}"
-        proc = subprocess.run(
-            [magick, "png:-", "-motion-blur", geometry, "png:-"],
-            input=self._blob,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            check=False,
-        )
-        if proc.returncode != 0 or not proc.stdout:
-            stderr = proc.stderr.decode("utf-8", errors="replace").strip()
-            raise RuntimeError(f"ImageMagick motion-blur failed: {stderr}")
-        self._blob = proc.stdout
-
-
-def _imagemagick_cli_motion_blur(wand: Any, radius: float, sigma: float, angle: float) -> bool:
-    if not isinstance(wand, _ImageMagickCliImage):
-        raise TypeError(f"Unsupported wand object for ImageMagick CLI shim: {type(wand)!r}")
-    wand._motion_blur(radius, sigma, angle)
-    return True
-
-
-def _install_libero_plus_dependency_shims() -> None:
-    """Provide tiny import-time shims for LIBERO-Plus optional eval helpers.
-
-    The closed-loop rollout path uses OffScreenRenderEnv directly. LIBERO-Plus
-    imports vector-env and image-perturbation helpers at module import time, so
-    these shims let the env load without installing unused optional packages.
-    """
-    _prepend_conda_site_packages()
-    _preload_conda_magickwand()
-    if not _module_available("gym"):
-        gym_mod = types.ModuleType("gym")
-
-        class _GymEnv:
-            pass
-
-        class _GymSpace:
-            pass
-
-        class _GymDictSpace(_GymSpace):
-            def __init__(self, *args, **kwargs) -> None:
-                self.args = args
-                self.kwargs = kwargs
-
-        class _GymTupleSpace(_GymSpace):
-            def __init__(self, *args, **kwargs) -> None:
-                self.args = args
-                self.kwargs = kwargs
-
-        gym_mod.Env = _GymEnv
-        gym_mod.Space = _GymSpace
-        gym_mod.make = _missing_optional_dependency("gym")
-        gym_mod.spaces = types.SimpleNamespace(Dict=_GymDictSpace, Tuple=_GymTupleSpace)
-        sys.modules["gym"] = gym_mod
-
-    if not _module_available("wand"):
-        wand_mod = types.ModuleType("wand")
-        wand_api_mod = types.ModuleType("wand.api")
-        wand_image_mod = types.ModuleType("wand.image")
-
-        wand_api_mod.library = types.SimpleNamespace(MagickMotionBlurImage=_imagemagick_cli_motion_blur)
-        wand_image_mod.Image = _ImageMagickCliImage
-        wand_mod.api = wand_api_mod
-        wand_mod.image = wand_image_mod
-        sys.modules["wand"] = wand_mod
-        sys.modules["wand.api"] = wand_api_mod
-        sys.modules["wand.image"] = wand_image_mod
-
-    if not _module_available("skimage") or not _module_available("skimage.filters"):
-        skimage_mod = types.ModuleType("skimage")
-        filters_mod = types.ModuleType("skimage.filters")
-
-        def _gaussian(image, sigma=1, channel_axis=None, **_kwargs):
-            try:
-                from scipy.ndimage import gaussian_filter
-            except Exception as exc:  # pragma: no cover - depends on eval env.
-                raise RuntimeError(
-                    "LIBERO-Plus gaussian blur perturbations require scipy or scikit-image."
-                ) from exc
-
-            ndim = getattr(image, "ndim", None)
-            if channel_axis is None or ndim is None:
-                return gaussian_filter(image, sigma=sigma)
-            axis = int(channel_axis)
-            if axis < 0:
-                axis += int(ndim)
-            sigma_by_axis = [sigma] * int(ndim)
-            if 0 <= axis < int(ndim):
-                sigma_by_axis[axis] = 0
-            return gaussian_filter(image, sigma=sigma_by_axis)
-
-        filters_mod.gaussian = _gaussian
-        skimage_mod.filters = filters_mod
-        sys.modules["skimage"] = skimage_mod
-        sys.modules["skimage.filters"] = filters_mod
 
 
 def _libero_assets_marker(path: Path) -> bool:
@@ -1131,7 +929,7 @@ def _activate_libero_plus_source(plus_root: str | os.PathLike[str]) -> Path:
     if _ACTIVE_LIBERO_PLUS_ROOT == root_str and "libero.libero" in sys.modules:
         return root
 
-    _install_libero_plus_dependency_shims()
+    _validate_libero_plus_dependencies()
     config_dir = _write_libero_plus_config(root)
     if _ACTIVE_LIBERO_PLUS_ROOT is None:
         _PREV_LIBERO_CONFIG_PATH = os.environ.get("LIBERO_CONFIG_PATH")

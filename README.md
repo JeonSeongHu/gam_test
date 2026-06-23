@@ -52,8 +52,9 @@ pinned package set (see `requirements.txt`). The validated reference environment
 Python 3.12 + a torch 2.8 GH200 build; the pins are public and work on torch >= 2.5.
 
 ### Option A: Docker (recommended; fully self-contained)
-Installs the pinned Python stack, the DA3 backbone, LIBERO, LIBERO-Plus, and the
-headless-MuJoCo GL/EGL system libraries.
+Installs the pinned Python stack, the DA3 backbone, LIBERO, LIBERO-Plus, the
+LIBERO-Plus perturbation libraries, and the headless-MuJoCo GL/EGL system
+libraries.
 
 ```bash
 docker build -t da3-libero .
@@ -74,8 +75,8 @@ python3.12 -m venv .venv && source .venv/bin/activate
 pip install torch==2.5.1 torchvision --index-url https://download.pytorch.org/whl/cu124
 pip install -r requirements.txt
 bash scripts/setup_sources.sh
-# system GL libs for headless rendering (Debian/Ubuntu):
-#   sudo apt-get install libgl1 libglvnd0 libegl1 libgles2 libosmesa6 libglfw3 ffmpeg
+# system libs for headless rendering and LIBERO-Plus motion blur (Debian/Ubuntu):
+#   sudo apt-get install libgl1 libglvnd0 libegl1 libgles2 libosmesa6 libglfw3 ffmpeg imagemagick libmagickwand-dev
 ```
 
 `scripts/setup_sources.sh` clones the **DA3 backbone** (`ByteDance-Seed/Depth-Anything-3`,
@@ -95,6 +96,8 @@ export WANDB_API_KEY=...                       # optional; only with --wandb
 
 `requirements.txt` is the curated, public, pinned list (the install target).
 `requirements-cscs.lock` is a reference freeze of the exact validated cluster env.
+The public launchers assume these Docker/conda/venv dependencies are installed
+in the active environment and leave runtime library paths untouched.
 
 ### Data & weights (download separately, lay out under `$DA3_ROOT`)
 All machine-specific paths in the configs are `${oc.env:DA3_ROOT,.}/...` (OmegaConf):

@@ -1,18 +1,17 @@
 # =============================================================================
-# DA3-Giant `gam` — LIBERO / LIBERO-Plus (training + closed-loop inference)
+# DA3-Giant `gam` for LIBERO / LIBERO-Plus (training + closed-loop inference)
 #
 # Pins below are the EXACT versions of the validated environment (CSCS GH200,
 # Python 3.12). They are all public / pip-installable. Reproduce with either:
-#   - Docker:  docker build -t da3-libero .        (recommended — see Dockerfile)
+#   - Docker:  docker build -t da3-libero .        (recommended; see Dockerfile)
 #   - conda :  conda env create -f environment.yml
 #   - venv  :  python3.12 -m venv .venv && . .venv/bin/activate &&
 #              pip install -r requirements.txt
 #
-# Two install steps are NOT covered by this file (done by the Dockerfile, or
-# follow the README):
-#   1) torch / torchvision — install the build matching your CUDA/platform FIRST
+# Additional setup steps are handled by the Dockerfile or README:
+#   1) torch / torchvision: install the build matching your CUDA/platform FIRST
 #      (see note below). Everything here is compatible with torch >= 2.5.
-#   2) The LIBERO benchmark + the DA3 backbone — installed from source; see README
+#   2) The LIBERO benchmark + the DA3 backbone: installed from source; see README
 #      / Dockerfile. IMPORTANT: install LIBERO with `--no-deps` (its own
 #      requirements.txt pins old, conflicting versions of numpy/transformers/gym).
 # =============================================================================
@@ -20,7 +19,7 @@
 # ---- torch ------------------------------------------------------------------
 # Validated on a torch 2.8 GH200 build; public-compatible with torch >= 2.5
 # (needed for torch.nn.attention.flex_attention / BlockMask in the predictor;
-# a dense-mask fallback exists for older torch but is untested here).
+# older torch builds are outside the public validation matrix.
 # Install the wheel for YOUR platform BEFORE the rest, e.g.:
 #   pip install torch==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cu124
 # The Dockerfile uses the pytorch/pytorch:2.5.1-cuda12.4 base, so torch is
@@ -64,7 +63,7 @@ wandb==0.24.2
 
 # ---- closed-loop simulator eval (LIBERO + LIBERO-Plus) ----------------------
 # MuJoCo + robosuite + gymnasium drive the LIBERO rollout. robosuite 1.4.1 is
-# the version LIBERO targets; do NOT bump to 1.5.x. numba/llvmlite back
+# the version LIBERO targets. numba/llvmlite back
 # robosuite's controller math; PyOpenGL provides the EGL bindings for headless
 # rendering (set MUJOCO_GL=egl).
 mujoco==3.6.0
@@ -75,6 +74,9 @@ Farama-Notifications==0.0.4
 numba==0.60.0
 llvmlite==0.43.0
 PyOpenGL==3.1.10
+gym==0.26.2
+scikit-image==0.25.2
+Wand==0.6.13
 
 # ---- LIBERO benchmark python deps (the LIBERO package itself is source-installed
 #      with --no-deps; these are the only runtime deps its env classes need) ----
