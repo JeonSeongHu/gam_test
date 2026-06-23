@@ -14,6 +14,7 @@ import multiprocessing as mp
 import os
 import re
 import signal
+import subprocess
 import sys
 import time
 import traceback
@@ -925,6 +926,59 @@ def _preload_conda_magickwand() -> None:
             logger.debug("Could not preload MagickWand from %s: %s", candidate, exc)
 
 
+def _imagemagick_binary() -> str | None:
+    candidates: list[Path] = []
+    local_root = os.environ.get("DA3_LOCAL_IMAGEMAGICK")
+    if local_root:
+        base = Path(local_root)
+        candidates.extend([base / "conda" / "bin" / "magick", base / "bin" / "magick"])
+    for path_dir in os.environ.get("PATH", "").split(os.pathsep):
+        if path_dir:
+            candidates.append(Path(path_dir) / "magick")
+    for candidate in candidates:
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return str(candidate)
+    return None
+
+
+class _ImageMagickCliImage:
+    def __init__(self, *args, blob: bytes | None = None, **_kwargs) -> None:
+        if blob is None:
+            raise TypeError("ImageMagick CLI shim requires blob=... input")
+        self._blob = bytes(blob)
+        self.wand = self
+
+    def make_blob(self, *_args, **_kwargs) -> bytes:
+        return self._blob
+
+    def _motion_blur(self, radius: float, sigma: float, angle: float) -> None:
+        magick = _imagemagick_binary()
+        if magick is None:
+            raise RuntimeError(
+                "LIBERO-Plus motion-blur perturbations require ImageMagick; "
+                "set DA3_LOCAL_IMAGEMAGICK or put `magick` on PATH."
+            )
+        geometry = f"{float(radius):g}x{float(sigma):g}+{float(angle):g}"
+        proc = subprocess.run(
+            [magick, "png:-", "-motion-blur", geometry, "png:-"],
+            input=self._blob,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+        if proc.returncode != 0 or not proc.stdout:
+            stderr = proc.stderr.decode("utf-8", errors="replace").strip()
+            raise RuntimeError(f"ImageMagick motion-blur failed: {stderr}")
+        self._blob = proc.stdout
+
+
+def _imagemagick_cli_motion_blur(wand: Any, radius: float, sigma: float, angle: float) -> bool:
+    if not isinstance(wand, _ImageMagickCliImage):
+        raise TypeError(f"Unsupported wand object for ImageMagick CLI shim: {type(wand)!r}")
+    wand._motion_blur(radius, sigma, angle)
+    return True
+
+
 def _install_libero_plus_dependency_shims() -> None:
     """Provide tiny import-time shims for LIBERO-Plus optional eval helpers.
 
@@ -964,19 +1018,8 @@ def _install_libero_plus_dependency_shims() -> None:
         wand_api_mod = types.ModuleType("wand.api")
         wand_image_mod = types.ModuleType("wand.image")
 
-        def _missing_wand_call(*_args, **_kwargs):
-            raise RuntimeError(
-                "LIBERO-Plus motion-blur perturbations require the official "
-                "'wand' / ImageMagick dependency. Install LIBERO-Plus optional "
-                "eval dependencies instead of using a non-official fallback."
-            )
-
-        class _MissingWandImage:
-            def __init__(self, *_args, **_kwargs) -> None:
-                _missing_wand_call()
-
-        wand_api_mod.library = types.SimpleNamespace(MagickMotionBlurImage=_missing_wand_call)
-        wand_image_mod.Image = _MissingWandImage
+        wand_api_mod.library = types.SimpleNamespace(MagickMotionBlurImage=_imagemagick_cli_motion_blur)
+        wand_image_mod.Image = _ImageMagickCliImage
         wand_mod.api = wand_api_mod
         wand_mod.image = wand_image_mod
         sys.modules["wand"] = wand_mod
