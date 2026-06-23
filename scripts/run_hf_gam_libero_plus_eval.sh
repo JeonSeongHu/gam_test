@@ -32,6 +32,8 @@ Environment:
   MAX_BATCH_SIZE             Max observations per policy forward. Default: 16
   MAX_WAIT_TIME              Batch wait time in seconds. Default: 0.5
   ENV_CACHE_SIZE             Cached envs per worker. Default: 1
+  GAM_PLUS_PERTURBATION      Plus perturbation filter. Default: all
+  GAM_PLUS_OFFICIAL_CATEGORY Plus official category filter. Default: all
 
 Example:
   GAM_EVAL_GPUS=0,1,2,3 scripts/run_hf_gam_libero_plus_eval.sh spatial
@@ -66,6 +68,8 @@ export PARALLEL_ENVS_PER_GPU="${PARALLEL_ENVS_PER_GPU:-16}"
 export MAX_BATCH_SIZE="${MAX_BATCH_SIZE:-16}"
 export MAX_WAIT_TIME="${MAX_WAIT_TIME:-0.5}"
 export ENV_CACHE_SIZE="${ENV_CACHE_SIZE:-1}"
+export GAM_PLUS_PERTURBATION="${GAM_PLUS_PERTURBATION:-all}"
+export GAM_PLUS_OFFICIAL_CATEGORY="${GAM_PLUS_OFFICIAL_CATEGORY:-all}"
 
 export MUJOCO_GL="${MUJOCO_GL:-egl}"
 export PYOPENGL_PLATFORM="${PYOPENGL_PLATFORM:-egl}"
@@ -330,7 +334,12 @@ run_suite() {
   local ckpt="$HF_ROOT/$ckpt_rel"
   local source_config="$HF_ROOT/$config_rel"
   local shard_count="${#GPUS[@]}"
-  local run_name="${suite_key}_hf_gam_${step_name}_plus_full_qpos_original_$(date +%Y%m%d_%H%M%S)"
+  local filter_name="full"
+  if [[ "$GAM_PLUS_PERTURBATION" != "all" || "$GAM_PLUS_OFFICIAL_CATEGORY" != "all" ]]; then
+    filter_name="${GAM_PLUS_PERTURBATION}_${GAM_PLUS_OFFICIAL_CATEGORY}"
+    filter_name="${filter_name//[^A-Za-z0-9_]/_}"
+  fi
+  local run_name="${suite_key}_hf_gam_${step_name}_plus_${filter_name}_qpos_original_$(date +%Y%m%d_%H%M%S)"
   local run_root="$OUT_ROOT/$suite_key/$run_name"
   local config="$run_root/config.gam.yaml"
 
@@ -346,8 +355,8 @@ run_name=$run_name
 run_root=$run_root
 gpu_csv=$GPU_CSV
 plus=true
-plus_perturbation=all
-plus_official_category=all
+plus_perturbation=$GAM_PLUS_PERTURBATION
+plus_official_category=$GAM_PLUS_OFFICIAL_CATEGORY
 num_trials_per_task=1
 libero_plus_robot_init_qpos_mode=original
 shard_count=$shard_count
@@ -375,8 +384,8 @@ EOF
         --suites "$suite_name" \
         --plus \
         --plus-root "$DA3_LIBERO_PLUS_DIR" \
-        --plus-perturbation all \
-        --plus-official-category all \
+        --plus-perturbation "$GAM_PLUS_PERTURBATION" \
+        --plus-official-category "$GAM_PLUS_OFFICIAL_CATEGORY" \
         --num-trials-per-task 1 \
         --libero-plus-robot-init-qpos-mode original \
         --history-horizon 1 \
