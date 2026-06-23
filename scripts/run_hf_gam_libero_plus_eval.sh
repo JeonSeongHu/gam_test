@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Standalone local-GPU LIBERO-Plus rollout eval for
-# SeonghuJeon/3da-libero-pointtrack-lw0-best.
+# SeonghuJeon/3da-libero-gam.
 #
 # This script does not assume Slurm. It launches one Python process per GPU,
 # passes explicit --shard-index/--shard-count values, then aggregates the shard
@@ -14,14 +14,14 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 usage() {
   cat <<'EOF'
 Usage:
-  scripts/run_hf_pointtrack_libero_plus_eval.sh spatial|object|goal|long|all
+  scripts/run_hf_gam_libero_plus_eval.sh spatial|object|goal|long|all
 
 Environment:
   GAM_EVAL_GPUS              Comma-separated physical GPU ids. Default: CUDA_VISIBLE_DEVICES or 0.
   HF_ROOT                    Downloaded HF checkpoint root.
-                             Default: checkpoints_hf/3da-libero-pointtrack-lw0-best
+                             Default: checkpoints_hf/3da-libero-gam
   OUT_ROOT                   Eval output root.
-                             Default: results/eval_libero_batched/hf_pointtrack_lw0_best_plus_local
+                             Default: results/eval_libero_batched/hf_gam_plus_local
   DA3_LIBERO_SOURCE_DIR      LIBERO checkout root. Default: ./LIBERO
   DA3_LIBERO_PLUS_DIR        LIBERO-Plus checkout root. Default: ./LIBERO-plus
   DA3_PYTHON                 Python executable. Default: python
@@ -31,7 +31,7 @@ Environment:
   ENV_CACHE_SIZE             Cached envs per worker. Default: 1
 
 Example:
-  GAM_EVAL_GPUS=0,1,2,3 scripts/run_hf_pointtrack_libero_plus_eval.sh spatial
+  GAM_EVAL_GPUS=0,1,2,3 scripts/run_hf_gam_libero_plus_eval.sh spatial
 EOF
 }
 
@@ -54,8 +54,8 @@ export DA3_ROOT="${DA3_ROOT:-$REPO_ROOT}"
 export DA3_PYTHON="${DA3_PYTHON:-python}"
 export DA3_LIBERO_SOURCE_DIR="${DA3_LIBERO_SOURCE_DIR:-$REPO_ROOT/LIBERO}"
 export DA3_LIBERO_PLUS_DIR="${DA3_LIBERO_PLUS_DIR:-$REPO_ROOT/LIBERO-plus}"
-export HF_ROOT="${HF_ROOT:-$REPO_ROOT/checkpoints_hf/3da-libero-pointtrack-lw0-best}"
-export OUT_ROOT="${OUT_ROOT:-$REPO_ROOT/results/eval_libero_batched/hf_pointtrack_lw0_best_plus_local}"
+export HF_ROOT="${HF_ROOT:-$REPO_ROOT/checkpoints_hf/3da-libero-gam}"
+export OUT_ROOT="${OUT_ROOT:-$REPO_ROOT/results/eval_libero_batched/hf_gam_plus_local}"
 export PARALLEL_ENVS_PER_GPU="${PARALLEL_ENVS_PER_GPU:-16}"
 export MAX_BATCH_SIZE="${MAX_BATCH_SIZE:-16}"
 export MAX_WAIT_TIME="${MAX_WAIT_TIME:-0.5}"
@@ -93,7 +93,7 @@ required_files=(
 for path in "${required_files[@]}"; do
   if [[ ! -s "$path" ]]; then
     echo "ERROR: missing required HF file: $path" >&2
-    echo "Download with: hf download SeonghuJeon/3da-libero-pointtrack-lw0-best --local-dir $HF_ROOT" >&2
+    echo "Download with: hf download SeonghuJeon/3da-libero-gam --local-dir $HF_ROOT" >&2
     exit 2
   fi
 done
@@ -269,7 +269,7 @@ run_suite() {
   local ckpt="$HF_ROOT/$ckpt_rel"
   local config="$HF_ROOT/$config_rel"
   local shard_count="${#GPUS[@]}"
-  local run_name="${suite_key}_hf_pointtrack_lw0_best_${step_name}_plus_full_qpos_original_$(date +%Y%m%d_%H%M%S)"
+  local run_name="${suite_key}_hf_gam_${step_name}_plus_full_qpos_original_$(date +%Y%m%d_%H%M%S)"
   local run_root="$OUT_ROOT/$suite_key/$run_name"
 
   mkdir -p "$run_root/shards"

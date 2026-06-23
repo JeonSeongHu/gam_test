@@ -2410,10 +2410,10 @@ def run_da3_finetune_training(args, cfg):
             if rank == 0:
                 logger.info("[step=%07d] unified eval skipped: empty eval loader", int(eval_step))
             return
-        if predictor_type not in {"gam", "gam", "block12_ar"}:
+        if predictor_type not in {"gam"}:
             raise RuntimeError(
                 f"predictor.type={predictor_type!r} is not supported by unified eval; "
-                "use gam/block12_ar."
+                "use gam."
             )
 
         from robot.unified_loss import compute_gam_forward_loss
@@ -2982,7 +2982,7 @@ def run_da3_finetune_training(args, cfg):
                 if hasattr(raw_model_unwrapped, "_orig_mod"):
                     raw_model_unwrapped = raw_model_unwrapped._orig_mod
                 H = sample_H(unified_H_choices, unified_H_weights)
-                if predictor_type in {"gam", "gam", "block12_ar"}:
+                if predictor_type in {"gam"}:
                     H = max(1, min(int(H), n_action_steps - 1))
                 language_texts = batch.get("task_description", None) if use_language else None
                 gt_depth_da3 = batch.get("gt_depth_da3")
@@ -2991,7 +2991,7 @@ def run_da3_finetune_training(args, cfg):
                 gt_camera_extrinsics_c2w = batch.get("gt_camera_extrinsics_c2w")
                 gt_depth_scene_scale = batch.get("gt_depth_scene_scale")
                 forward_profile = {} if step_profile_enabled else None
-                if predictor_type in {"gam", "gam", "block12_ar"}:
+                if predictor_type in {"gam"}:
                     out = compute_gam_forward_loss(
                         student_da3=raw_model_unwrapped.student_da3,
                         teacher_da3=teacher_da3,
@@ -3062,7 +3062,7 @@ def run_da3_finetune_training(args, cfg):
                 loss_action = out["loss_action"]
                 loss_feat_future = out["loss_feat_future"]
                 loss_feat_current = out.get("loss_feat_current", None)
-                if predictor_type in {"gam", "gam", "block12_ar"} and loss_feat_current is not None:
+                if predictor_type in {"gam"} and loss_feat_current is not None:
                     loss_feat = loss_feat_current + loss_feat_future
                 else:
                     loss_feat = out["loss_feat_past"]
@@ -3748,7 +3748,7 @@ def run_da3_finetune_training(args, cfg):
                                 predicted_next_visual_tokens = out.get("predicted_next_visual_tokens", None)
                                 if (
                                     log_depth_media
-                                    and predictor_type in {"gam", "gam", "block12_ar"}
+                                    and predictor_type in {"gam"}
                                 ):
                                     log_gam_future_visualizations(
                                         sd,

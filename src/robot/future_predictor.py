@@ -1926,14 +1926,12 @@ class GAMFuturePredictor(nn.Module):
 def build_future_predictor(cfg: dict, sigreg: Optional[nn.Module] = None) -> nn.Module:
     """Instantiate the predictor from a config dict.
 
-    Only `predictor.type: gam` (or synonyms) is supported. Legacy v1 /
-    v2 / level0 / block12_ar aliases still select gam — legacy config
-    keys like `action_seed_mode` / `use_action_history` are explicitly rejected
-    to surface stale configs. `shallow12_ar` is the pre-rename name of `gam`
-    and is accepted so checkpoints saved before the rename still load.
+    Only `predictor.type: gam` is supported. Legacy config keys like
+    `action_seed_mode` / `use_action_history` are explicitly rejected to
+    surface stale configs.
     """
     pred_type = str(cfg.get("type", cfg.get("architecture", "gam"))).lower()
-    allowed = {"gam", "shallow12_ar", "block12_ar"}
+    allowed = {"gam"}
     legacy_aliases = {"level0", "v1", "v2"}
     if pred_type in legacy_aliases:
         raise ValueError(

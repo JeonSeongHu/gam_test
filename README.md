@@ -35,7 +35,7 @@ Losses (compute_gam_forward_loss): action L1 + future-feature distillation
 |------|---------|
 | `src/train_robot.py` | Training entry (`run_da3_finetune_training`) |
 | `src/eval_libero_unified.py` | LIBERO / LIBERO-Plus closed-loop + open-loop eval |
-| `scripts/run_hf_pointtrack_libero_plus_eval.sh` | Standalone local-GPU LIBERO-Plus eval for the public HF checkpoints |
+| `scripts/run_hf_gam_libero_plus_eval.sh` | Standalone local-GPU LIBERO-Plus eval for the public GAM checkpoints |
 | `src/robot/future_predictor.py` | `GAMFuturePredictor` |
 | `src/robot/unified_loss.py` | `compute_gam_forward_loss` |
 | `src/robot/da3_giant_encoder.py` | DA3-Giant backbone + action-token injection + depth/camera decode |
@@ -116,8 +116,8 @@ $DA3_ROOT/
 The standalone LIBERO-Plus rollout checkpoint set is hosted at:
 
 ```bash
-hf download SeonghuJeon/3da-libero-pointtrack-lw0-best \
-  --local-dir checkpoints_hf/3da-libero-pointtrack-lw0-best
+hf download SeonghuJeon/3da-libero-gam \
+  --local-dir checkpoints_hf/3da-libero-gam
 ```
 
 Expected layout:
@@ -178,15 +178,15 @@ The wrapper below does that and aggregates shard outputs into one suite-level
 ```bash
 # One suite on four local GPUs.
 GAM_EVAL_GPUS=0,1,2,3 \
-scripts/run_hf_pointtrack_libero_plus_eval.sh spatial
+scripts/run_hf_gam_libero_plus_eval.sh spatial
 
 # Other suites.
-GAM_EVAL_GPUS=0,1,2,3 scripts/run_hf_pointtrack_libero_plus_eval.sh object
-GAM_EVAL_GPUS=0,1,2,3 scripts/run_hf_pointtrack_libero_plus_eval.sh goal
-GAM_EVAL_GPUS=0,1,2,3 scripts/run_hf_pointtrack_libero_plus_eval.sh long
+GAM_EVAL_GPUS=0,1,2,3 scripts/run_hf_gam_libero_plus_eval.sh object
+GAM_EVAL_GPUS=0,1,2,3 scripts/run_hf_gam_libero_plus_eval.sh goal
+GAM_EVAL_GPUS=0,1,2,3 scripts/run_hf_gam_libero_plus_eval.sh long
 
 # Sequentially run all four suites.
-GAM_EVAL_GPUS=0,1,2,3 scripts/run_hf_pointtrack_libero_plus_eval.sh all
+GAM_EVAL_GPUS=0,1,2,3 scripts/run_hf_gam_libero_plus_eval.sh all
 ```
 
 Default protocol:

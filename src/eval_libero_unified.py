@@ -143,8 +143,8 @@ from eval_video import (
 # ---------------------------------------------------------------------------
 
 # CUDA-graph compile modes write outputs into static graph buffers that the
-# next graph replay overwrites. shallow12_ar / GAM keeps shallow tokens in its
-# history and threads module outputs across separate compiled graphs, so a raw
+# next graph replay overwrites. GAM keeps shallow tokens in its history and
+# threads module outputs across separate compiled graphs, so a raw
 # graph-buffer output raises "accessing tensor output of CUDAGraphs that has
 # been overwritten by a subsequent run". _CloneOutputModule clones each
 # compiled module's outputs so callers hold independent memory. One extra
@@ -2021,11 +2021,7 @@ def load_stage1_policy(
     predictor_enabled = bool(predictor_cfg.get("enabled", False)) and (
         ckpt.get("future_predictor") is not None or _preloaded_fp is not None
     )
-    predictor_type = str(predictor_cfg.get("type", predictor_cfg.get("architecture", "level0"))).lower()
-    # `shallow12_ar` is the pre-rename name of `gam`; normalize so checkpoints
-    # saved before the rename take the gam AR rollout path (not the legacy else).
-    if predictor_type == "shallow12_ar":
-        predictor_type = "gam"
+    predictor_type = str(predictor_cfg.get("type", predictor_cfg.get("architecture", "gam"))).lower()
     future_predictor = None
     text_conditioner = None
     text_cache: dict[str, dict[str, torch.Tensor]] = {}
@@ -3048,7 +3044,7 @@ def load_stage1_policy(
             # gam AR path uses NONE of those for action selection.
             _shallow_ar_active = (
                 future_predictor is not None
-                and predictor_type in {"gam", "gam", "block12_ar"}
+                and predictor_type in {"gam"}
             )
             _skip_full_encode = (
                 _shallow_ar_active
@@ -3095,7 +3091,7 @@ def load_stage1_policy(
                     policy._lang_task_desc = model_task_desc  # type: ignore[attr-defined]
                     policy._lang_feats = lang_feats          # type: ignore[attr-defined]
                     policy._lang_mask = lang_mask            # type: ignore[attr-defined]
-                if predictor_type in {"gam", "gam", "block12_ar"}:
+                if predictor_type in {"gam"}:
                     # --- Shallow encode cache (persistent across policy calls) ---
                     # Blocks 0-12 are pre-global local-attention only, so each
                     # (timestep, view) frame is independently encodable. We cache
@@ -3107,7 +3103,7 @@ def load_stage1_policy(
                     # reproduce the train path. Keep it disabled until prefix
                     # head outputs are cached too.
                     _use_kv = False
-                    _persist_ok = _use_kv and predictor_type in {"gam", "gam", "block12_ar"}
+                    _persist_ok = _use_kv and predictor_type in {"gam"}
                     _cache_shallow = getattr(policy, "_obs_shallow_cache", None)
                     _cache_kv = getattr(policy, "_obs_kv_cache", None)
                     _cache_len = int(getattr(policy, "_obs_cache_length", 0))
@@ -3333,12 +3329,12 @@ def load_stage1_policy(
                             )
                         if decode_visuals and "rgb" in decoded_future:
                             debug_rgb = decoded_future["rgb"].detach().cpu()
-            if predictor_type not in {"gam", "gam", "block12_ar"}:
+            if predictor_type not in {"gam"}:
                 action_tokens_for_head = rollout_action_tokens if rollout_action_tokens is not None else last_action_tokens
                 with torch.amp.autocast("cuda", dtype=torch.bfloat16, enabled=use_bf16):
                     pred = model.action_head(action_tokens_for_head)
 
-        if predictor_type not in {"gam", "gam", "block12_ar"}:
+        if predictor_type not in {"gam"}:
             if pred.ndim == 4:
                 pred = pred.reshape(pred.shape[0], pred.shape[1] * pred.shape[2], pred.shape[3])
             actions_norm_raw = pred[0].float().cpu()
@@ -3393,7 +3389,7 @@ def load_stage1_policy(
             "depth_source": depth_source,
             "future_depth_seed": (
                 "gam_block13_input"
-                if predictor_type in {"gam", "gam", "block12_ar"}
+                if predictor_type in {"gam"}
                 else "current_stream_1536"
             ),
             "rgb": debug_rgb,
@@ -3415,7 +3411,7 @@ def load_stage1_policy(
                 int(rollout_decode_steps)
                 if rollout_decode_steps is not None
                 else (
-                    action_steps if predictor_type in {"gam", "gam", "block12_ar"}
+                    action_steps if predictor_type in {"gam"}
                     else max(0, action_steps - H_eff)
                 )
             ),
@@ -3428,7 +3424,7 @@ def load_stage1_policy(
             ),
             "rollout_decode_horizon_mode": stage1_rollout_decode_horizon_mode,
             "rollout_decode_horizon_requested": str(rollout_decode_horizon),
-            "history_commit_stride_actions": 1 if predictor_type in {"gam", "gam", "block12_ar"} else max(1, chunk_size),
+            "history_commit_stride_actions": 1 if predictor_type in {"gam"} else max(1, chunk_size),
             "history_commit_stride_env_actions": max(1, chunk_size),
             "env_actions_per_model_step": max(1, chunk_size),
             "history_committed_entries": len(image_history),
@@ -3738,7 +3734,7 @@ def load_stage1_policy(
     def predict_batch(requests: list[dict[str, Any]]) -> list[torch.Tensor]:
         if not requests:
             return []
-        if future_predictor is None or predictor_type not in {"gam", "gam", "block12_ar"}:
+        if future_predictor is None or predictor_type not in {"gam"}:
             raise RuntimeError(
                 "Batched LIBERO eval currently supports Stage 1 gam policies only. "
                 "Use src/eval_libero_unified.py for non-predictor or Stage 2 checkpoints."
@@ -3958,7 +3954,7 @@ def load_stage1_policy(
         pending = state["pending_history"]
         if not pending:
             return
-        expected_commit_steps = 1 if predictor_type in {"gam", "gam", "block12_ar"} else max(1, chunk_size)
+        expected_commit_steps = 1 if predictor_type in {"gam"} else max(1, chunk_size)
         if int(executed_policy_actions) == expected_commit_steps:
             state["image_history"].append(pending["images"])
             state["raw_image_history"].append(pending["raw_images"])
@@ -4003,7 +3999,7 @@ def load_stage1_policy(
         """Commit the latest observation as history only at the training anchor stride."""
         if not pending_history:
             return
-        expected_commit_steps = 1 if predictor_type in {"gam", "gam", "block12_ar"} else max(1, chunk_size)
+        expected_commit_steps = 1 if predictor_type in {"gam"} else max(1, chunk_size)
         if int(executed_policy_actions) == expected_commit_steps:
             image_history.append(pending_history["images"])
             raw_image_history.append(pending_history["raw_images"])
@@ -4075,7 +4071,7 @@ def load_stage1_policy(
     policy.get_session_debug = _get_batch_session_debug
 
     steady_action_timesteps = (
-        stage1_native_train_horizon if predictor_type in {"gam", "gam", "block12_ar"}
+        stage1_native_train_horizon if predictor_type in {"gam"}
         else max(1, action_steps - stage1_history_horizon + 1)
     )
     max_action_horizon = steady_action_timesteps if future_predictor is not None else max(1, chunk_size)
@@ -4099,14 +4095,14 @@ def load_stage1_policy(
         "max_low_level_actions_per_call": steady_action_timesteps * max(1, chunk_size),
         "action_horizon_unit": (
             "model_step"
-            if future_predictor is not None and predictor_type in {"gam", "gam", "block12_ar"}
+            if future_predictor is not None and predictor_type in {"gam"}
             else "env_action"
         ),
         "chunk_position_encoding": str(action_head_cfg.get("chunk_position_encoding", "none")),
         "max_action_horizon": max_action_horizon,
         "stage1_rollout_mode": (
             "gam_autoregressive_chunks"
-            if future_predictor is not None and predictor_type in {"gam", "gam", "block12_ar"}
+            if future_predictor is not None and predictor_type in {"gam"}
             else ("future_predictor_action_sequence" if future_predictor is not None else "current_action_token_chunk")
         ),
         "dataset_target_hz": infer_policy_target_hz(dataset_cfg),
@@ -4126,7 +4122,7 @@ def load_stage1_policy(
         "stage1_rollout_decode_horizon_requested": str(rollout_decode_horizon),
         "stage1_rollout_decode_horizon_mode": stage1_rollout_decode_horizon_mode,
         "history_commit_stride_actions": (
-            1 if predictor_type in {"gam", "gam", "block12_ar"} else max(1, chunk_size)
+            1 if predictor_type in {"gam"} else max(1, chunk_size)
         ),
         "history_commit_stride_env_actions": max(1, chunk_size),
         "eval_crop_scale": eval_crop_scale,
