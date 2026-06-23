@@ -288,6 +288,22 @@ print(f"[aggregate] {suite_name} {total_success}/{total_trials} sr={summary['ove
 PY
 }
 
+prepare_gam_config() {
+  local src_config="$1"
+  local dst_config="$2"
+  "$DA3_PYTHON" - "$src_config" "$dst_config" <<'PY'
+import sys
+from omegaconf import OmegaConf
+
+src, dst = sys.argv[1], sys.argv[2]
+cfg = OmegaConf.load(src)
+if not hasattr(cfg, "predictor") or cfg.predictor is None:
+    cfg.predictor = {}
+cfg.predictor.type = "gam"
+OmegaConf.save(config=cfg, f=dst)
+PY
+}
+
 run_suite() {
   local suite_key="$1"
   local suite_name="$2"
@@ -295,17 +311,20 @@ run_suite() {
   local config_rel="$4"
   local step_name="$5"
   local ckpt="$HF_ROOT/$ckpt_rel"
-  local config="$HF_ROOT/$config_rel"
+  local source_config="$HF_ROOT/$config_rel"
   local shard_count="${#GPUS[@]}"
   local run_name="${suite_key}_hf_gam_${step_name}_plus_full_qpos_original_$(date +%Y%m%d_%H%M%S)"
   local run_root="$OUT_ROOT/$suite_key/$run_name"
+  local config="$run_root/config.gam.yaml"
 
   mkdir -p "$run_root/shards"
+  prepare_gam_config "$source_config" "$config"
   cat > "$run_root/run_config.txt" <<EOF
 suite_key=$suite_key
 suite_name=$suite_name
 checkpoint=$ckpt
 config=$config
+source_config=$source_config
 run_name=$run_name
 run_root=$run_root
 gpu_csv=$GPU_CSV
