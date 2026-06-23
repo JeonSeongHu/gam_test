@@ -24,6 +24,9 @@ Environment:
                              Default: results/eval_libero_batched/hf_gam_plus_local
   DA3_LIBERO_SOURCE_DIR      LIBERO checkout root. Default: ./LIBERO
   DA3_LIBERO_PLUS_DIR        LIBERO-Plus checkout root. Default: ./LIBERO-plus
+  DA3_LOCAL_GLVND            Optional local GLVND/EGL runtime root.
+  DA3_LOCAL_IMAGEMAGICK      Optional local ImageMagick runtime root.
+  DA3_LOCAL_PYTHON_DEPS      Optional extra Python site-packages root.
   DA3_PYTHON                 Python executable. Default: python
   PARALLEL_ENVS_PER_GPU      Env workers per GPU process. Default: 16
   MAX_BATCH_SIZE             Max observations per policy forward. Default: 16
@@ -54,6 +57,9 @@ export DA3_ROOT="${DA3_ROOT:-$REPO_ROOT}"
 export DA3_PYTHON="${DA3_PYTHON:-python}"
 export DA3_LIBERO_SOURCE_DIR="${DA3_LIBERO_SOURCE_DIR:-$REPO_ROOT/LIBERO}"
 export DA3_LIBERO_PLUS_DIR="${DA3_LIBERO_PLUS_DIR:-$REPO_ROOT/LIBERO-plus}"
+export DA3_LOCAL_GLVND="${DA3_LOCAL_GLVND:-$REPO_ROOT/.local/glvnd_runtime}"
+export DA3_LOCAL_IMAGEMAGICK="${DA3_LOCAL_IMAGEMAGICK:-$REPO_ROOT/.local/imagemagick}"
+export DA3_LOCAL_PYTHON_DEPS="${DA3_LOCAL_PYTHON_DEPS:-$REPO_ROOT/.local/python_deps/site}"
 export HF_ROOT="${HF_ROOT:-$REPO_ROOT/checkpoints_hf/3da-libero-gam}"
 export OUT_ROOT="${OUT_ROOT:-$REPO_ROOT/results/eval_libero_batched/hf_gam_plus_local}"
 export PARALLEL_ENVS_PER_GPU="${PARALLEL_ENVS_PER_GPU:-16}"
@@ -71,7 +77,29 @@ if [[ -d "$DA3_LIBERO_SOURCE_DIR/libero" ]]; then
   export LIBERO_CONFIG_PATH="${LIBERO_CONFIG_PATH:-$DA3_LIBERO_SOURCE_DIR/.libero_config_da3}"
 fi
 
-export PYTHONPATH="$REPO_ROOT/src:$DA3_LIBERO_PLUS_DIR:$DA3_LIBERO_SOURCE_DIR:${PYTHONPATH:-}"
+if [[ -d "$DA3_LOCAL_GLVND/lib" ]]; then
+  export LD_LIBRARY_PATH="$DA3_LOCAL_GLVND/lib:${LD_LIBRARY_PATH:-}"
+fi
+if [[ -d "$DA3_LOCAL_GLVND/glvnd/egl_vendor.d" ]]; then
+  export __EGL_VENDOR_LIBRARY_DIRS="$DA3_LOCAL_GLVND/glvnd/egl_vendor.d"
+fi
+if [[ -d "$DA3_LOCAL_IMAGEMAGICK/conda/lib" ]]; then
+  export LD_LIBRARY_PATH="$DA3_LOCAL_IMAGEMAGICK/conda/lib:${LD_LIBRARY_PATH:-}"
+  export PATH="$DA3_LOCAL_IMAGEMAGICK/conda/bin:${PATH:-}"
+  export MAGICK_HOME="$DA3_LOCAL_IMAGEMAGICK/conda"
+  export MAGICK_CONFIGURE_PATH="$DA3_LOCAL_IMAGEMAGICK/conda/etc/ImageMagick-7:$DA3_LOCAL_IMAGEMAGICK/conda/lib/ImageMagick-7.1.1/config-7_Q16HDRI10"
+  export MAGICK_CODER_MODULE_PATH="$DA3_LOCAL_IMAGEMAGICK/conda/lib/ImageMagick-7.1.1/modules-7_Q16HDRI10/coders"
+  export MAGICK_FILTER_MODULE_PATH="$DA3_LOCAL_IMAGEMAGICK/conda/lib/ImageMagick-7.1.1/modules-7_Q16HDRI10/filters"
+elif [[ -d "$DA3_LOCAL_IMAGEMAGICK/lib" ]]; then
+  export LD_LIBRARY_PATH="$DA3_LOCAL_IMAGEMAGICK/lib:${LD_LIBRARY_PATH:-}"
+  export PATH="$DA3_LOCAL_IMAGEMAGICK/bin:${PATH:-}"
+  export MAGICK_HOME="$DA3_LOCAL_IMAGEMAGICK"
+  export MAGICK_CONFIGURE_PATH="$DA3_LOCAL_IMAGEMAGICK/etc/ImageMagick-7:$DA3_LOCAL_IMAGEMAGICK/lib/ImageMagick-7.1.1/config-7_Q16HDRI10"
+  export MAGICK_CODER_MODULE_PATH="$DA3_LOCAL_IMAGEMAGICK/lib/ImageMagick-7.1.1/modules-7_Q16HDRI10/coders"
+  export MAGICK_FILTER_MODULE_PATH="$DA3_LOCAL_IMAGEMAGICK/lib/ImageMagick-7.1.1/modules-7_Q16HDRI10/filters"
+fi
+
+export PYTHONPATH="$REPO_ROOT/src:$DA3_LIBERO_PLUS_DIR:$DA3_LIBERO_SOURCE_DIR:$DA3_LOCAL_PYTHON_DEPS:${PYTHONPATH:-}"
 
 GPU_CSV="${GAM_EVAL_GPUS:-${CUDA_VISIBLE_DEVICES:-0}}"
 IFS=',' read -ra GPUS <<< "$GPU_CSV"
