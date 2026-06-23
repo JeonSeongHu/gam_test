@@ -99,7 +99,24 @@ elif [[ -d "$DA3_LOCAL_IMAGEMAGICK/lib" ]]; then
   export MAGICK_FILTER_MODULE_PATH="$DA3_LOCAL_IMAGEMAGICK/lib/ImageMagick-7.1.1/modules-7_Q16HDRI10/filters"
 fi
 
-export PYTHONPATH="$REPO_ROOT/src:$DA3_LIBERO_PLUS_DIR:$DA3_LIBERO_SOURCE_DIR:$DA3_LOCAL_PYTHON_DEPS:${PYTHONPATH:-}"
+PYTHON_DEPS_PATH=""
+if [[ -d "$DA3_LOCAL_PYTHON_DEPS" ]]; then
+  if [[ -e "$DA3_LOCAL_PYTHON_DEPS/bddl" ]]; then
+    PYTHON_DEPS_PATH="$OUT_ROOT/.python_deps_without_bddl"
+    mkdir -p "$PYTHON_DEPS_PATH"
+    for entry in "$DA3_LOCAL_PYTHON_DEPS"/*; do
+      base="$(basename "$entry")"
+      case "$base" in
+        bddl|bddl-*.dist-info) continue ;;
+      esac
+      ln -sfn "$entry" "$PYTHON_DEPS_PATH/$base"
+    done
+  else
+    PYTHON_DEPS_PATH="$DA3_LOCAL_PYTHON_DEPS"
+  fi
+fi
+
+export PYTHONPATH="$REPO_ROOT/src:$DA3_LIBERO_PLUS_DIR:$DA3_LIBERO_SOURCE_DIR${PYTHON_DEPS_PATH:+:$PYTHON_DEPS_PATH}:${PYTHONPATH:-}"
 
 GPU_CSV="${GAM_EVAL_GPUS:-${CUDA_VISIBLE_DEVICES:-0}}"
 IFS=',' read -ra GPUS <<< "$GPU_CSV"
