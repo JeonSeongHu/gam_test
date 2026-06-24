@@ -41,7 +41,7 @@ from robot.dataset import (
     _normalize_image_tensor,
     _quat_xyzw_to_rpy,
 )
-from eval_registry_utils import append_eval_record, local_now_minute
+from gam.evaluation.registry import append_eval_record, local_now_minute
 from robot.future_predictor import build_future_predictor
 from robot.rollout_env import (
     create_rollout_env_libero,
@@ -55,10 +55,10 @@ from robot.unified_loss import (
 from train_robot import DA3FineTuneModel
 
 # Behavior-preserving split: these modules hold function groups extracted from
-# this file. They must never import eval_libero_unified (no circular import).
-# Re-importing here keeps both the internal call sites below and the external
-# ``eval_libero_unified.<name>`` API unchanged.
-from eval_libero_plus import (
+# this file. Keep imports one-way into this entrypoint to avoid circular imports.
+# Re-importing here keeps both internal call sites and the external
+# ``eval_libero_unified.<name>`` API stable.
+from gam.evaluation.libero_plus import (
     LIBERO_PLUS_OFFICIAL_CATEGORY_ALIASES,
     LIBERO_PLUS_OFFICIAL_CATEGORY_SLUGS,
     LIBERO_PLUS_PERTURBATION_ALIASES,
@@ -75,7 +75,7 @@ from eval_libero_plus import (
     select_eval_task_entries,
     select_libero_plus_task_subset,
 )
-from eval_video import (
+from gam.evaluation.video import (
     LIBERO_CAMERA_NAMES,
     SPLIT_VIDEO_KEYS,
     SPLIT_VIDEO_PANEL_SIZE,

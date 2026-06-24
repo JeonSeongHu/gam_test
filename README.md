@@ -21,6 +21,12 @@
   <sup>*</sup>Equal contribution
 </p>
 
+<p align="center">
+  <a href="https://cvlab-kaist.github.io/Geometric-Action-Model/">
+    <img src="https://cvlab-kaist.github.io/Geometric-Action-Model/static/images/teaser3.webp?v=20260616" alt="GAM paper teaser: overall pipeline and quantitative results" width="100%">
+  </a>
+</p>
+
 GAM is a language-conditioned robot manipulation policy that repurposes a
 pretrained geometric foundation model as one shared backbone for perception,
 future prediction, and action decoding. This repository is the public
@@ -62,7 +68,9 @@ prediction, optional DA3 depth decoding, and optional SIGReg.
 | Path | Role |
 |------|------|
 | `src/train_robot.py` | GAM fine-tuning entrypoint |
-| `src/eval_libero_unified.py` | LIBERO and LIBERO-Plus rollout evaluation |
+| `src/gam/training/` | Training helpers for metrics, data loading, checkpoints, distributed setup, and debug guards |
+| `src/eval_libero_unified.py` | LIBERO and LIBERO-Plus rollout evaluation entrypoint |
+| `src/gam/evaluation/` | Evaluation helpers for LIBERO-Plus metadata, registry records, and rollout videos |
 | `scripts/run_hf_gam_libero_plus_eval.sh` | Standalone local-GPU LIBERO-Plus checkpoint eval |
 | `src/robot/future_predictor.py` | `GAMFuturePredictor` |
 | `src/robot/unified_loss.py` | GAM training losses |

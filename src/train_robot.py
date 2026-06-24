@@ -71,7 +71,7 @@ from robot.visualization import (
 # Behavior-preserving helper groups extracted from this file. The giant
 # training loop (run_da3_finetune_training), main, DA3FineTuneModel, and
 # Stage1SubsetEMA stay below; everything imported here is referenced by them.
-from train_metrics import (
+from gam.training.metrics import (
     ACTION_DIM_NAMES,
     _masked_mean,
     add_indexed_metrics,
@@ -85,7 +85,7 @@ from train_metrics import (
     reshape_action_mask,
     reshape_action_sequence,
 )
-from train_debug import (
+from gam.training.debug import (
     _debug_check_finetune_tensors,
     _debug_log_finetune_tensor_stats,
     _debug_log_nonfinite_forward_state,
@@ -96,7 +96,7 @@ from train_debug import (
     _summarize_named_tensor_stats,
     _summarize_nonfinite_named_tensors,
 )
-from train_distributed import (
+from gam.training.distributed import (
     _get_git_info,
     _install_training_signal_handlers,
     _parse_slurm_time_limit_seconds,
@@ -110,7 +110,7 @@ from train_distributed import (
     setup_distributed,
     validate_deepspeed_batch_config,
 )
-from train_data import (
+from gam.training.data import (
     RestartableDistributedSampler,
     VirtualEpochDataset,
     _batch_source_wait_summary,
@@ -126,7 +126,7 @@ from train_data import (
     collate_fn,
     create_dataset_and_loader,
 )
-from train_checkpoint import (
+from gam.training.checkpoint import (
     _action_timing_signature_for_dataset,
     _action_timing_signature_from_cfg,
     _action_timing_signatures_by_dataset,
