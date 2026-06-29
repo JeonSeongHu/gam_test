@@ -128,6 +128,7 @@ Set the runtime paths for local shells:
 
 ```bash
 export DA3_ROOT=/path/to/this_repo
+export DA3_BASE_CKPT=$DA3_ROOT/checkpoints/track4world_da3.pth
 export DA3_LIBERO_SOURCE_DIR=$DA3_ROOT/LIBERO
 export DA3_LIBERO_PLUS_DIR=$DA3_ROOT/LIBERO-plus
 export PYTHONPATH=$DA3_ROOT/src:$DA3_LIBERO_SOURCE_DIR:$PYTHONPATH
@@ -178,6 +179,14 @@ hf download SeonghuJeon/3da-libero-gam \
   --local-dir checkpoints_hf/3da-libero-gam
 ```
 
+For a single-suite smoke rollout, download only that suite:
+
+```bash
+hf download SeonghuJeon/3da-libero-gam \
+  spatial/gam.pt spatial/config.yaml \
+  --local-dir checkpoints_hf/3da-libero-gam
+```
+
 Expected layout:
 
 | Suite key | LIBERO suite | Checkpoint | Config |
@@ -188,6 +197,8 @@ Expected layout:
 | `long` | `libero_10` | `long/gam.pt` | `long/config.yaml` |
 
 Each config uses `predictor.enabled: true` and `predictor.type: gam`.
+The released configs resolve the DA3 base checkpoint and LIBERO data under
+`${DA3_ROOT}` by default.
 
 ## LIBERO-Plus Evaluation
 
