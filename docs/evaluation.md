@@ -80,6 +80,10 @@ Full LIBERO-Plus contains 10,030 one-trial episodes:
 The launcher sets `MUJOCO_GL=egl`, `PYOPENGL_PLATFORM=egl`, and
 `EGL_PLATFORM=device`. On a bare GPU machine, install the GL, EGL, OSMesa, GLFW,
 ffmpeg, and ImageMagick packages listed in the README installation section.
+For EGL rollout eval inside a headless container, the runtime must expose the
+NVIDIA EGL/OpenGL device stack. If startup fails while requesting
+`/dev/nvidia-modeset`, verify that the selected node provides that graphics
+device file before enabling graphics capabilities.
 
 ## LIBERO Evaluation
 

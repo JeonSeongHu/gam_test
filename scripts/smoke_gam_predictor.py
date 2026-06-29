@@ -1,6 +1,6 @@
 """Lightweight sanity smoke for the modernized gam AR predictor.
 
-Usage (inside the CSCS container):
+Usage (inside a CUDA Python environment):
     PYTHONPATH=src:$PYTHONPATH \
     python scripts/smoke_gam_predictor.py
 

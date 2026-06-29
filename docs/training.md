@@ -139,6 +139,22 @@ DeepSpeed ZeRO-2 is selected by the JSON passed to `--deepspeed_config`.
 | `optimizer.params.lr` | Base optimizer LR, overridden by train param groups |
 | `gradient_clipping` | Global grad clipping value |
 
+## Headless Container Runtime
+
+Training only requires CUDA compute and utility devices. On some Slurm,
+Pyxis/enroot, or NVIDIA Container Toolkit setups,
+`NVIDIA_DRIVER_CAPABILITIES=all` can make the NVIDIA hook request graphics
+device files such as `/dev/nvidia-modeset` before Python starts. For training
+jobs, set:
+
+```bash
+export NVIDIA_DRIVER_CAPABILITIES=compute,utility
+```
+
+For LIBERO rollout eval with EGL rendering, use a runtime that exposes the
+NVIDIA EGL/OpenGL device stack and verify the node provides the graphics device
+files required by that runtime.
+
 ## Compile Controls
 
 | Setting | Meaning |
