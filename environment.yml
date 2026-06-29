@@ -1,13 +1,12 @@
-# Conda environment for the DA3-Giant `gam` LIBERO / LIBERO-Plus release.
+# Conda environment for the GAM LIBERO / LIBERO-Plus release.
 #
 #   conda env create -f environment.yml
-#   conda activate da3-libero
+#   conda activate gam-libero
 #   bash scripts/setup_sources.sh        # clone + install DA3 backbone, LIBERO, LIBERO-Plus
 #
-# Python 3.12 + torch from the cu124 wheel index matches the validated reference
-# environment (CSCS GH200, Python 3.12). The Docker image (recommended) pins the
-# identical package set on a torch 2.5.1 base; see Dockerfile.
-name: da3-libero
+# Python 3.12 + torch from the cu124 wheel index matches the public Docker
+# environment. The Docker image pins the same package set on a torch 2.5.1 base.
+name: gam-libero
 channels:
   - conda-forge
 dependencies:
@@ -20,7 +19,7 @@ dependencies:
   # provides an OSMesa software fallback (MUJOCO_GL=osmesa).
   - mesalib
   - pip:
-      # torch with CUDA; adjust the index for your platform (CPU/ROCm/aarch64).
+      # torch with CUDA; adjust the index for your platform.
       - --extra-index-url https://download.pytorch.org/whl/cu124
       - -r requirements.txt
 # After `conda env create` + `scripts/setup_sources.sh`, set per shell:

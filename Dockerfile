@@ -1,20 +1,19 @@
 # =============================================================================
-# DA3-Giant `gam` for LIBERO / LIBERO-Plus (training + closed-loop inference)
+# GAM for LIBERO / LIBERO-Plus training and closed-loop inference
 #
 # Self-contained, reproducible build: installs the full pinned Python stack,
 # the LIBERO benchmark, LIBERO-Plus perturbation dependencies, and the DA3
 # backbone from source. Datasets and base weights are mounted at run time under
 # $DA3_ROOT (see README).
 #
-#   docker build -t da3-libero .
+#   docker build -t gam-libero .
 #   docker run --gpus all -it --rm \
 #     -e DA3_ROOT=/data -v /host/data_root:/data \
-#     -e WANDB_API_KEY=$WANDB_API_KEY da3-libero
+#     -e WANDB_API_KEY=$WANDB_API_KEY gam-libero
 #
-# The base image fixes torch==2.5.1 (+cu124) and Python 3.11. The validated
-# reference environment used Python 3.12 + a torch 2.8 GH200 build; the pinned
-# package set in requirements.txt is identical and works on both. torch >= 2.5
-# is required for the predictor's flex_attention / BlockMask path.
+# The base image fixes torch==2.5.1 (+cu124) and Python 3.11. The pinned
+# package set in requirements.txt targets CUDA GPU machines. torch >= 2.5 is
+# required for the predictor's flex_attention / BlockMask path.
 # =============================================================================
 FROM pytorch/pytorch:2.5.1-cuda12.4-cudnn9-devel
 
@@ -27,7 +26,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       libx11-6 libxext6 libxrender1 ffmpeg imagemagick libmagickwand-dev \
     && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /workspace/da3-libero
+WORKDIR /workspace/gam-libero
 
 # ---- Python deps (pinned). torch (2.5.1) already in the base image satisfies
 #      `torch>=2.5`, so pip keeps that build. ------------------------------------
@@ -67,10 +66,10 @@ COPY . .
 # LIBERO source; DA3 backbone is found via DA3_ROOT.
 ENV MUJOCO_GL=egl \
     PYOPENGL_PLATFORM=egl \
-    DA3_ROOT=/workspace/da3-libero \
+    DA3_ROOT=/workspace/gam-libero \
     DA3_LIBERO_SOURCE_DIR=/opt/LIBERO \
     DA3_LIBERO_PLUS_DIR=/opt/LIBERO-plus \
-    PYTHONPATH=/workspace/da3-libero/src:/opt/LIBERO \
+    PYTHONPATH=/workspace/gam-libero/src:/opt/LIBERO \
     PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 # Datasets + base weights are mounted or downloaded under $DA3_ROOT:

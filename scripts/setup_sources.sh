@@ -5,7 +5,7 @@
 #   - LIBERO-Plus  (optional, --plus)   -> ./LIBERO-plus
 #
 # Run AFTER creating the Python env (Docker does this automatically):
-#   conda activate da3-libero            # or: source .venv/bin/activate
+#   conda activate gam-libero            # or: source .venv/bin/activate
 #   bash scripts/setup_sources.sh
 #
 # Pinned commits match the validated reference environment. Override the install

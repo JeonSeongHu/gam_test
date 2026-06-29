@@ -51,8 +51,8 @@ Use Docker for the most reproducible setup:
 ```bash
 docker build -t gam-libero .
 docker run --gpus all -it --rm \
-  -v /host/gam_workspace/checkpoints:/workspace/da3-libero/checkpoints \
-  -v /host/gam_workspace/data:/workspace/da3-libero/data \
+  -v /host/gam_workspace/checkpoints:/workspace/gam-libero/checkpoints \
+  -v /host/gam_workspace/data:/workspace/gam-libero/data \
   -e WANDB_API_KEY=$WANDB_API_KEY \
   gam-libero
 ```
@@ -61,7 +61,7 @@ Conda and venv are also supported:
 
 ```bash
 conda env create -f environment.yml
-conda activate da3-libero
+conda activate gam-libero
 bash scripts/setup_sources.sh
 bash scripts/setup_libero_plus.sh --download-assets
 ```

@@ -1,29 +1,28 @@
 # =============================================================================
-# DA3-Giant `gam` for LIBERO / LIBERO-Plus (training + closed-loop inference)
+# GAM for LIBERO / LIBERO-Plus training and closed-loop inference
 #
-# Pins below are the EXACT versions of the validated environment (CSCS GH200,
-# Python 3.12). They are all public / pip-installable. Reproduce with either:
-#   - Docker:  docker build -t da3-libero .        (recommended; see Dockerfile)
+# These are the public Python dependencies for a CUDA GPU machine with Python
+# 3.12. Reproduce with either:
+#   - Docker:  docker build -t gam-libero .        (recommended; see Dockerfile)
 #   - conda :  conda env create -f environment.yml
 #   - venv  :  python3.12 -m venv .venv && . .venv/bin/activate &&
 #              pip install -r requirements.txt
 #
 # Additional setup steps are handled by the Dockerfile or README:
 #   1) torch / torchvision: install the build matching your CUDA/platform FIRST
-#      (see note below). Everything here is compatible with torch >= 2.5.
+#      (see the command below). Everything here is compatible with torch >= 2.5.
 #   2) The LIBERO benchmark + the DA3 backbone: installed from source; see README
-#      / Dockerfile. IMPORTANT: install LIBERO with `--no-deps` (its own
-#      requirements.txt pins old, conflicting versions of numpy/transformers/gym).
+#      / Dockerfile. Install LIBERO with `--no-deps` because its own dependency
+#      pins conflict with this release.
 # =============================================================================
 
 # ---- torch ------------------------------------------------------------------
-# Validated on a torch 2.8 GH200 build; public-compatible with torch >= 2.5
-# (needed for torch.nn.attention.flex_attention / BlockMask in the predictor;
-# older torch builds are outside the public validation matrix.
+# Public-compatible with torch >= 2.5. The GAM predictor uses
+# torch.nn.attention.flex_attention / BlockMask.
 # Install the wheel for YOUR platform BEFORE the rest, e.g.:
 #   pip install torch==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cu124
 # The Dockerfile uses the pytorch/pytorch:2.5.1-cuda12.4 base, so torch is
-# already present there and is intentionally not re-pinned in this file.
+# already present there.
 torch>=2.5
 torchvision
 
@@ -45,9 +44,9 @@ h5py==3.16.0
 omegaconf==2.3.0
 antlr4-python3-runtime==4.9.3
 pillow==11.2.1
-# NOTE: robosuite (below) also pulls non-headless opencv-python (needs a system
-# libGL). On a headless server, force headless cv2 after install (Docker /
-# scripts/setup_sources.sh do this):
+# robosuite can pull opencv-python with a system libGL dependency. On a headless
+# server, force headless cv2 after install. Docker and scripts/setup_sources.sh
+# do this:
 #   pip uninstall -y opencv-python opencv-python-headless && \
 #   pip install --no-deps opencv-python-headless==4.11.0.86
 opencv-python-headless==4.11.0.86
