@@ -1,25 +1,25 @@
-# GAM: Geometric Action Model for Robot Policy Learning
+<div align="center">
 
-<p align="center">
-  <a href="https://cvlab-kaist.github.io/Geometric-Action-Model/">Project Page</a> |
-  <a href="https://arxiv.org/abs/2606.17046">Paper</a> |
-  <a href="https://huggingface.co/SeonghuJeon/3da-libero-gam">Checkpoints</a> |
-  <a href="#citation">BibTeX</a>
-</p>
+# Geometric Action Model for Robot Policy Learning
 
-<p align="center">
-  Jisang Han<sup>*1</sup>, Seonghu Jeon<sup>*1</sup>, Jaewoo Jung<sup>1,2</sup>,
-  Rene Zurbrugg<sup>2,3</sup>, Honggyu An<sup>1</sup>, Tifanny Portela<sup>2,3</sup>,
-  Marco Hutter<sup>2</sup>, Marc Pollefeys<sup>2</sup>,
-  Seungryong Kim<sup>1</sup>, Sunghwan Hong<sup>2,3</sup>
-</p>
+[Jisang Han](https://onground-korea.github.io/)<sup>1*</sup> ·
+[Seonghu Jeon](https://jeonseonghu.github.io/about-me/)<sup>1*</sup> ·
+[Jaewoo Jung](https://crepejung00.github.io/)<sup>1,2</sup> ·
+[René Zurbrügg](https://renezurbruegg.github.io/)<sup>2,3</sup> ·
+[Honggyu An](https://hg010303.github.io/)<sup>1</sup> ·
+[Tifanny Portela](https://scholar.google.com/citations?user=y3BWpCUAAAAJ&hl=fr)<sup>2,3</sup> ·
+[Marco Hutter](https://scholar.google.com/citations?user=DO3quJYAAAAJ&hl=en)<sup>2</sup> ·
+[Marc Pollefeys](https://scholar.google.com/citations?user=YYH0BjEAAAAJ&hl=en)<sup>2</sup> ·
+[Seungryong Kim](https://scholar.google.com/citations?user=cIK1hS8AAAAJ&hl=ko)<sup>1†</sup> ·
+[Sunghwan Hong](https://sunghwanhong.github.io/)<sup>2,3†</sup>
 
-<p align="center">
-  <sup>1</sup>KAIST AI &nbsp;&nbsp;
-  <sup>2</sup>ETH Zurich &nbsp;&nbsp;
-  <sup>3</sup>ETH AI Center &nbsp;&nbsp;
-  <sup>*</sup>Equal contribution
-</p>
+<sup>1</sup> KAIST AI · <sup>2</sup> ETH Zurich · <sup>3</sup> ETH AI Center
+
+<sup>*</sup> Equal contribution. &nbsp; <sup>†</sup> Co-corresponding authors.
+
+### [Paper](https://arxiv.org/abs/2606.17046) | [Project Page](https://cvlab-kaist.github.io/Geometric-Action-Model/) | [Checkpoints](https://huggingface.co/SeonghuJeon/3da-libero-gam) | [BibTeX](#citation)
+
+</div>
 
 <p align="center">
   <a href="https://cvlab-kaist.github.io/Geometric-Action-Model/">
