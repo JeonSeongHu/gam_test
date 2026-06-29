@@ -46,7 +46,7 @@ and **6.9 ms** model-forward latency with the CUDA graph inference path.
 
 ## Installation
 
-Use Docker for the most reproducible setup:
+Docker Setup:
 
 ```bash
 docker build -t gam-libero .
@@ -57,7 +57,7 @@ docker run --gpus all -it --rm \
   gam-libero
 ```
 
-Conda and venv are also supported:
+Conda Setup:
 
 ```bash
 conda env create -f environment.yml
@@ -65,6 +65,8 @@ conda activate gam-libero
 bash scripts/setup_sources.sh
 bash scripts/setup_libero_plus.sh --download-assets
 ```
+
+venv Setup:
 
 ```bash
 python3.12 -m venv .venv
@@ -76,7 +78,7 @@ bash scripts/setup_sources.sh
 bash scripts/setup_libero_plus.sh --download-assets
 ```
 
-For Debian or Ubuntu venv installs, install the system packages used by Docker:
+Debian/Ubuntu System Packages:
 
 ```bash
 sudo apt-get install \
@@ -84,7 +86,7 @@ sudo apt-get install \
   ffmpeg imagemagick libmagickwand-dev
 ```
 
-Set the runtime paths for local shells:
+Runtime Paths:
 
 ```bash
 export DA3_ROOT=/path/to/this_repo
