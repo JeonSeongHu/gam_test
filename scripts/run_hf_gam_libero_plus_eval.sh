@@ -85,13 +85,13 @@ if (( ${#GPUS[@]} < 1 )); then
 fi
 
 required_files=(
-  "$HF_ROOT/spatial/0084000.pt"
+  "$HF_ROOT/spatial/gam.pt"
   "$HF_ROOT/spatial/config.yaml"
-  "$HF_ROOT/object/0022000.pt"
+  "$HF_ROOT/object/gam.pt"
   "$HF_ROOT/object/config.yaml"
-  "$HF_ROOT/goal/0068500.pt"
+  "$HF_ROOT/goal/gam.pt"
   "$HF_ROOT/goal/config.yaml"
-  "$HF_ROOT/long/0091500.pt"
+  "$HF_ROOT/long/gam.pt"
   "$HF_ROOT/long/config.yaml"
 )
 for path in "${required_files[@]}"; do
@@ -385,21 +385,21 @@ EOF
 
 case "$SUITE_REQUEST" in
   spatial)
-    run_suite spatial libero_spatial spatial/0084000.pt spatial/config.yaml 0084000
+    run_suite spatial libero_spatial spatial/gam.pt spatial/config.yaml gam
     ;;
   object)
-    run_suite object libero_object object/0022000.pt object/config.yaml 0022000
+    run_suite object libero_object object/gam.pt object/config.yaml gam
     ;;
   goal)
-    run_suite goal libero_goal goal/0068500.pt goal/config.yaml 0068500
+    run_suite goal libero_goal goal/gam.pt goal/config.yaml gam
     ;;
   long)
-    run_suite long libero_10 long/0091500.pt long/config.yaml 0091500
+    run_suite long libero_10 long/gam.pt long/config.yaml gam
     ;;
   all)
-    run_suite spatial libero_spatial spatial/0084000.pt spatial/config.yaml 0084000
-    run_suite object libero_object object/0022000.pt object/config.yaml 0022000
-    run_suite goal libero_goal goal/0068500.pt goal/config.yaml 0068500
-    run_suite long libero_10 long/0091500.pt long/config.yaml 0091500
+    run_suite spatial libero_spatial spatial/gam.pt spatial/config.yaml gam
+    run_suite object libero_object object/gam.pt object/config.yaml gam
+    run_suite goal libero_goal goal/gam.pt goal/config.yaml gam
+    run_suite long libero_10 long/gam.pt long/config.yaml gam
     ;;
 esac

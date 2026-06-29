@@ -161,6 +161,14 @@ Files:
 
 Configs resolve data and checkpoint paths through `${oc.env:DA3_ROOT,.}`.
 
+Download the released training assets:
+
+```bash
+hf download SeonghuJeon/3da-libero-training-assets \
+  --repo-type dataset \
+  --local-dir .
+```
+
 ## Public Checkpoints
 
 Download the released GAM checkpoints:
@@ -174,10 +182,10 @@ Expected layout:
 
 | Suite key | LIBERO suite | Checkpoint | Config |
 |-----------|--------------|------------|--------|
-| `spatial` | `libero_spatial` | `spatial/0084000.pt` | `spatial/config.yaml` |
-| `object` | `libero_object` | `object/0022000.pt` | `object/config.yaml` |
-| `goal` | `libero_goal` | `goal/0068500.pt` | `goal/config.yaml` |
-| `long` | `libero_10` | `long/0091500.pt` | `long/config.yaml` |
+| `spatial` | `libero_spatial` | `spatial/gam.pt` | `spatial/config.yaml` |
+| `object` | `libero_object` | `object/gam.pt` | `object/config.yaml` |
+| `goal` | `libero_goal` | `goal/gam.pt` | `goal/config.yaml` |
+| `long` | `libero_10` | `long/gam.pt` | `long/config.yaml` |
 
 Each config uses `predictor.enabled: true` and `predictor.type: gam`.
 
