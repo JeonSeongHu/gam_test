@@ -2,14 +2,14 @@
 
 Extracted from ``train_robot.py`` to keep the training entrypoint smaller.
 These functions are behavior-preserving and self-contained: they depend only
-on stdlib/torch plus ``robot.dataset`` statistics helpers.
+on stdlib/torch plus ``robot.data.dataset`` statistics helpers.
 """
 
 from __future__ import annotations
 
 import torch
 
-from robot.dataset import (
+from robot.data.dataset import (
     compute_action_statistics,
     summarize_action_statistics,
 )

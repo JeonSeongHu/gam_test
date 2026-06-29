@@ -151,7 +151,7 @@ DeepSpeed ZeRO-2 is selected by the JSON passed to `--deepspeed_config`.
 
 Closed-loop eval during training is configured in YAML with
 `training.closed_loop_evals`. Each entry is a rollout profile consumed by
-`src/robot/closed_loop_libero_eval.py`.
+`src/robot/evaluation/closed_loop_libero_eval.py`.
 
 ```yaml
 training:

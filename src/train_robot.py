@@ -6,48 +6,37 @@ import logging
 import math
 import os
 import random
-import re
-import signal
-import subprocess
 import sys
-from collections import Counter
 from contextlib import nullcontext
 from copy import deepcopy
 import datetime
 from time import perf_counter, time
-from typing import Optional
 
 import numpy as np
 import torch
 import torch.distributed as dist
-import torch.nn as nn
 import torch.nn.functional as F
 from omegaconf import OmegaConf
-from torch.utils.data import DataLoader, Dataset, DistributedSampler
 
 
 _SRC_DIR = os.path.dirname(os.path.abspath(__file__))
 if _SRC_DIR not in sys.path:
     sys.path.insert(0, _SRC_DIR)
 
-from robot.action_head_v2 import ActionHeadV2
-from robot.action_head_oft import OFTL1RegressionHead
-from robot.conditioning import ProprioConditioner, TextConditioner
-from robot.backbone_factory import (
-    backbone_block_count,
+from robot.modeling.action_head_v2 import ActionHeadV2
+from robot.modeling.action_head_oft import OFTL1RegressionHead
+from robot.modeling.conditioning import ProprioConditioner, TextConditioner
+from robot.modeling.backbone_factory import (
     create_stage1_backbone,
     default_freeze_blocks_before,
     stage1_backbone_type,
 )
-from robot.dataset import (
+from robot.data.dataset import (
     ActionNormalizer,
     StateNormalizer,
     DEFAULT_ACTION_NORM_MASK,
-    build_robot_dataset,
-    compute_action_statistics,
-    summarize_action_statistics,
 )
-from robot.closed_loop_libero_eval import (
+from robot.evaluation.closed_loop_libero_eval import (
     all_reduce_counts as closed_loop_all_reduce_counts,
     evaluate_closed_loop_libero_from_training,
     format_wandb_log as closed_loop_format_wandb_log,
@@ -55,10 +44,10 @@ from robot.closed_loop_libero_eval import (
     validate_libero_env as closed_loop_validate_libero_env,
     write_eval_artifacts as closed_loop_write_eval_artifacts,
 )
-from robot.future_predictor import build_future_predictor
-from robot.reg_loss import FeatureRegularizer
-from robot.sigreg import SIGReg
-from robot.visualization import (
+from robot.modeling.future_predictor import build_future_predictor
+from robot.losses.reg_loss import FeatureRegularizer
+from robot.modeling.sigreg import SIGReg
+from robot.viz.visualization import (
     log_action_trajectory,
     log_camera_visualization,
     log_da3_visualizations,
@@ -68,9 +57,9 @@ from robot.visualization import (
     log_unified_future_visualizations,
 )
 
-# Behavior-preserving helper groups extracted from this file. The giant
-# training loop (run_da3_finetune_training), main, DA3FineTuneModel, and
-# Stage1SubsetEMA stay below; everything imported here is referenced by them.
+# Behavior-preserving helper groups extracted from this entrypoint. The main
+# training loop stays here; reusable model, EMA, optimizer, eval, data, metrics,
+# distributed, checkpoint, and debug helpers live under src/gam/training.
 from gam.training.metrics import (
     ACTION_DIM_NAMES,
     _masked_mean,
@@ -99,14 +88,11 @@ from gam.training.debug import (
 from gam.training.distributed import (
     _get_git_info,
     _install_training_signal_handlers,
-    _parse_slurm_time_limit_seconds,
     _plain_config_container,
     _resolve_distributed_timeout_minutes,
     _resolve_seconds_setting,
     _slurm_remaining_seconds,
-    _slurm_time_limit_seconds_from_scontrol,
     _termination_requested_across_ranks,
-    _training_signal_handler,
     setup_distributed,
     validate_deepspeed_batch_config,
 )
@@ -114,9 +100,7 @@ from gam.training.data import (
     RestartableDistributedSampler,
     VirtualEpochDataset,
     _batch_source_wait_summary,
-    _collate_view_count,
     _compact_counter,
-    _dataloader_worker_init,
     _expand_bool_mask_to,
     _maybe_virtualize_train_epoch,
     _pad_tensor_dim,
@@ -140,496 +124,29 @@ from gam.training.checkpoint import (
     resolve_stats_dir,
     state_normalizer_dim_mismatches,
 )
-
-
-def _normalize_closed_loop_eval_profiles(training_cfg):
-    """Return enabled closed-loop eval profiles plus legacy-prefix mode."""
-    profiles_raw = _plain_config_container(training_cfg.get("closed_loop_evals", None))
-    legacy_mode = profiles_raw is None
-    if profiles_raw is None:
-        legacy_raw = _plain_config_container(training_cfg.get("closed_loop_eval", {}))
-        legacy_cfg = dict(legacy_raw) if legacy_raw else {}
-        profiles = [legacy_cfg] if bool(legacy_cfg.get("enabled", False)) else []
-    else:
-        if not isinstance(profiles_raw, (list, tuple)):
-            raise TypeError("training.closed_loop_evals must be a list of profile dictionaries.")
-        profiles = []
-        for idx, item in enumerate(profiles_raw):
-            item = _plain_config_container(item)
-            if not item:
-                continue
-            profile = dict(item)
-            profile.setdefault("name", f"profile{idx}")
-            if bool(profile.get("enabled", False)):
-                profiles.append(profile)
-    for idx, profile in enumerate(profiles):
-        name = str(profile.get("name") or f"profile{idx}")
-        safe_name = re.sub(r"[^a-zA-Z0-9_.-]+", "_", name).strip("_") or f"profile{idx}"
-        profile["name"] = safe_name
-        profile["_wandb_prefix"] = "rollout" if legacy_mode else f"rollout/{safe_name}"
-    return profiles, legacy_mode
-
-
-def _prepare_rollout_video_frames(frames, macro_block_size=16):
-    """Convert variable-sized rollout debug frames into a single mp4-safe stack."""
-    arrays = []
-    max_h = 0
-    max_w = 0
-    for frame in frames:
-        arr = np.asarray(frame)
-        if arr.ndim == 2:
-            arr = arr[..., None]
-        if arr.ndim != 3:
-            continue
-        if arr.shape[-1] == 1:
-            arr = np.repeat(arr, 3, axis=-1)
-        elif arr.shape[-1] > 3:
-            arr = arr[..., :3]
-        if arr.dtype != np.uint8:
-            if np.issubdtype(arr.dtype, np.floating):
-                scale = 255.0 if float(np.nanmax(arr)) <= 1.0 else 1.0
-                arr = np.clip(arr * scale, 0, 255).astype(np.uint8)
-            else:
-                arr = np.clip(arr, 0, 255).astype(np.uint8)
-        arr = np.ascontiguousarray(arr)
-        arrays.append(arr)
-        max_h = max(max_h, int(arr.shape[0]))
-        max_w = max(max_w, int(arr.shape[1]))
-    if not arrays:
-        return []
-
-    block = max(1, int(macro_block_size))
-    target_h = int(math.ceil(max_h / block) * block)
-    target_w = int(math.ceil(max_w / block) * block)
-    packed = []
-    for arr in arrays:
-        h, w = int(arr.shape[0]), int(arr.shape[1])
-        canvas = np.zeros((target_h, target_w, 3), dtype=np.uint8)
-        canvas[:h, :w, :] = arr
-        packed.append(canvas)
-    return packed
-
-
-class DA3FineTuneModel(nn.Module):
-    """Trainable DA3 student + action head (+ optional unified future predictor)."""
-
-    def __init__(
-        self,
-        student_da3,
-        action_head,
-        proprio_head=None,
-        proprio_conditioner=None,
-        future_predictor=None,
-        text_conditioner=None,
-    ):
-        super().__init__()
-        self.student_da3 = student_da3
-        self.action_head = action_head
-        self.proprio_head = proprio_head
-        # Kept for checkpoint backward compatibility; legacy mode ignores it.
-        self.proprio_conditioner = proprio_conditioner
-        # Unified future-predictor path: if these are set, the training loop
-        # calls compute_unified_forward_loss() instead of .forward().
-        self.future_predictor = future_predictor
-        self.text_conditioner = text_conditioner
-
-    def forward(self, images, proprio=None, action_input=None, force_action_input=False):
-        """Legacy Stage 1 forward (unchanged).
-
-        Args:
-            images: (B, T*V, 3, H, W) normalized images.
-            proprio: Unused (kept for call-site compatibility).
-            action_input: (B, T, 7) normalized GT actions. During training,
-                stochastically selects between this and learnable token.
-                At inference (or None), always uses learnable token.
-            force_action_input: If True, always use action_input (bypass stochastic).
-                Used for AE-mode visualization.
-
-        Returns:
-            action_pred: (B, T, 7) predicted actions.
-            raw_levels: list of raw token tensors for feature reg loss.
-            features_per_level: list of (patches, cls) for depth/camera reg loss.
-        """
-        features_per_level, action_tokens, raw_levels = self.student_da3.encode_with_actions(
-            images, action_input=action_input, force_action_input=force_action_input,
-        )
-        action_pred = self.action_head(action_tokens)
-        return action_pred, raw_levels, features_per_level
-
-
-def _unwrap_train_model(model):
-    raw_model = model.module if hasattr(model, "module") else model
-    if hasattr(raw_model, "_orig_mod"):
-        raw_model = raw_model._orig_mod
-    return raw_model
-
-
-def _strip_compile_prefix_state_dict(state):
-    if state is None:
-        return None
-    return {str(k).replace("_orig_mod.", ""): v for k, v in state.items()}
-
-
-def _stage1_subset_ema_config(training_cfg):
-    raw_cfg = training_cfg.get("ema", {}) or {}
-    if not isinstance(raw_cfg, dict):
-        raw_cfg = {"enabled": bool(raw_cfg)}
-    enabled = bool(raw_cfg.get("enabled", training_cfg.get("ema_enabled", False)))
-    include = raw_cfg.get(
-        "include",
-        ["future_predictor", "action_head", "text_conditioner_proj", "student_da3_blocks"],
-    )
-    if isinstance(include, str):
-        include = [include]
-    blocks_start = raw_cfg.get("student_da3_blocks_start", None)
-    blocks_end = raw_cfg.get("student_da3_blocks_end", None)
-    return {
-        "enabled": enabled,
-        "decay": float(raw_cfg.get("decay", training_cfg.get("ema_decay", 0.999))),
-        "device": str(raw_cfg.get("device", "cpu")).lower(),
-        "dtype": str(raw_cfg.get("dtype", "float32")).lower(),
-        "start_step": int(raw_cfg.get("start_step", 0)),
-        "update_every": max(1, int(raw_cfg.get("update_every", 1))),
-        "include": tuple(str(x) for x in include),
-        "student_da3_blocks_start": None if blocks_start is None else int(blocks_start),
-        "student_da3_blocks_end": None if blocks_end is None else int(blocks_end),
-    }
-
-
-def _finalize_stage1_subset_ema_config(ema_cfg, student_da3):
-    cfg = dict(ema_cfg)
-    if cfg["student_da3_blocks_start"] is None:
-        cfg["student_da3_blocks_start"] = default_freeze_blocks_before(student_da3)
-    if cfg["student_da3_blocks_end"] is None:
-        cfg["student_da3_blocks_end"] = max(0, backbone_block_count(student_da3) - 1)
-    return cfg
-
-
-def _resolve_backbone_action_input_dim(action_head_cfg, embed_dim, *, logger=None, label="action_head.input_dim"):
-    raw = action_head_cfg.get("input_dim", None)
-    if raw is None or str(raw).lower() in {"auto", "da3", "backbone", "embed_dim"}:
-        return int(embed_dim)
-    value = int(raw)
-    if value == int(embed_dim):
-        return value
-    if value == 1536:
-        if logger is not None:
-            logger.warning(
-                "%s=%d mismatches selected Stage 1 embed_dim=%d; using embed_dim. "
-                "Set input_dim: auto or omit it when switching backbones.",
-                label,
-                value,
-                int(embed_dim),
-            )
-        return int(embed_dim)
-    raise ValueError(f"{label}={value} must match selected Stage 1 embed_dim={int(embed_dim)}.")
-
-
-def _is_auto_value(value) -> bool:
-    return isinstance(value, str) and value.strip().lower() in {"auto", "infer", "from_camera_keys"}
-
-
-def _dataset_pad_view_max(dataset_cfg: dict) -> Optional[int]:
-    mode = str(dataset_cfg.get("view_mode", dataset_cfg.get("view_policy", "")) or "").strip().lower()
-    enabled = bool(dataset_cfg.get("pad_views_to_max", mode in {"pad_to_max", "padded", "pad", "variable", "variable_pad"}))
-    if not enabled:
-        return None
-    raw = dataset_cfg.get("max_views", dataset_cfg.get("view_max_views"))
-    if raw is None or _is_auto_value(raw):
-        raise ValueError("dataset.view_mode=pad_to_max requires dataset.max_views.")
-    value = int(raw)
-    if value <= 0:
-        raise ValueError(f"dataset.max_views must be positive, got {raw!r}.")
-    return value
-
-
-def _sequence_length(value) -> Optional[int]:
-    if value is None or isinstance(value, (str, bytes)):
-        return None
-    try:
-        return len(value)
-    except TypeError:
-        return None
-
-
-def _resolve_da3_n_views(dataset_cfg: dict, da3_ft_cfg: dict) -> int:
-    """Resolve train-time view count from explicit config or camera lists."""
-    candidates: list[tuple[str, int]] = []
-    pad_view_max = _dataset_pad_view_max(dataset_cfg)
-
-    def add_candidate(label: str, raw_value) -> None:
-        if raw_value is None or _is_auto_value(raw_value):
-            return
-        value = int(raw_value)
-        if value <= 0:
-            raise ValueError(f"{label} must be positive, got {raw_value!r}.")
-        candidates.append((label, value))
-
-    add_candidate("da3_finetune.n_views", da3_ft_cfg.get("n_views", None))
-    add_candidate("dataset.n_views", dataset_cfg.get("n_views", None))
-    if pad_view_max is not None:
-        candidates.append(("dataset.max_views", int(pad_view_max)))
-
-    camera_len = _sequence_length(dataset_cfg.get("camera_keys"))
-    if camera_len is not None:
-        if camera_len <= 0:
-            raise ValueError("dataset.camera_keys must be non-empty when provided.")
-        if pad_view_max is not None:
-            if int(camera_len) > int(pad_view_max):
-                raise ValueError(
-                    "dataset.camera_keys length exceeds dataset.max_views: "
-                    f"len={camera_len}, max_views={pad_view_max}."
-                )
-        else:
-            candidates.append(("len(dataset.camera_keys)", int(camera_len)))
-
-    if not candidates:
-        return 2
-
-    resolved = candidates[0][1]
-    mismatches = [(label, value) for label, value in candidates if value != resolved]
-    if mismatches:
-        details = ", ".join(f"{label}={value}" for label, value in candidates)
-        raise ValueError(f"View-count config mismatch: {details}.")
-
-    rollout_len = _sequence_length(dataset_cfg.get("rollout_camera_keys"))
-    if rollout_len is not None and pad_view_max is not None and rollout_len > resolved:
-        raise ValueError(
-            "dataset.rollout_camera_keys length must be <= resolved max_views: "
-            f"len={rollout_len}, max_views={resolved}."
-        )
-    if rollout_len is not None and pad_view_max is None and rollout_len != resolved:
-        raise ValueError(
-            "dataset.rollout_camera_keys length must match resolved n_views: "
-            f"len={rollout_len}, n_views={resolved}."
-        )
-
-    return int(resolved)
-
-
-def _sync_da3_view_count_to_cfg(cfg, dataset_cfg: dict, da3_ft_cfg: dict, n_views: int) -> None:
-    dataset_cfg["n_views"] = int(n_views)
-    da3_ft_cfg["n_views"] = int(n_views)
-    if OmegaConf.is_config(cfg):
-        OmegaConf.update(cfg, "dataset.n_views", int(n_views), merge=True)
-        OmegaConf.update(cfg, "da3_finetune.n_views", int(n_views), merge=True)
-
-
-class Stage1SubsetEMA:
-    """EMA tracker for the trainable gam policy subgraph."""
-
-    _PREFIX_TO_CKPT_KEY = {
-        "student_da3": "student_da3_ema",
-        "action_head": "action_head_ema",
-        "future_predictor": "future_predictor_ema",
-        "text_conditioner.proj": "text_conditioner_proj_ema",
-    }
-
-    def __init__(self, model, cfg, logger=None):
-        self.decay = float(cfg["decay"])
-        if not (0.0 <= self.decay < 1.0):
-            raise ValueError(f"training.ema.decay must be in [0, 1), got {self.decay}")
-        self.device_spec = str(cfg["device"]).lower()
-        self.dtype = self._resolve_dtype(str(cfg["dtype"]).lower())
-        self.start_step = int(cfg["start_step"])
-        self.update_every = max(1, int(cfg["update_every"]))
-        self.include = tuple(cfg["include"])
-        self.blocks_start = int(cfg["student_da3_blocks_start"])
-        self.blocks_end = int(cfg["student_da3_blocks_end"])
-        if self.blocks_start > self.blocks_end:
-            raise ValueError(
-                "training.ema.student_da3_blocks_start must be <= "
-                "student_da3_blocks_end"
-            )
-
-        self.names = []
-        self.shadow = {}
-        raw_model = _unwrap_train_model(model)
-        for name, param in raw_model.named_parameters():
-            if not param.requires_grad or not self._tracks_name(name):
-                continue
-            self.names.append(name)
-            self.shadow[name] = self._copy_param(param)
-
-        self.num_params = sum(int(self.shadow[name].numel()) for name in self.names)
-        self.num_tensors = len(self.names)
-        if logger is not None:
-            logger.info(
-                "Stage1 subset EMA enabled: decay=%.6f update_every=%d start_step=%d "
-                "device=%s dtype=%s tensors=%d params=%.1fM scope=%s blocks=%d-%d",
-                self.decay,
-                self.update_every,
-                self.start_step,
-                self.device_spec,
-                str(self.dtype).replace("torch.", ""),
-                self.num_tensors,
-                self.num_params / 1e6,
-                ",".join(self.include),
-                self.blocks_start,
-                self.blocks_end,
-            )
-            if self.num_tensors == 0:
-                logger.warning("Stage1 subset EMA is enabled but no trainable parameters matched the scope.")
-
-    @staticmethod
-    def _resolve_dtype(name):
-        aliases = {
-            "fp32": torch.float32,
-            "float32": torch.float32,
-            "bf16": torch.bfloat16,
-            "bfloat16": torch.bfloat16,
-            "fp16": torch.float16,
-            "float16": torch.float16,
-        }
-        if name not in aliases:
-            raise ValueError(f"Unsupported training.ema.dtype={name!r}; expected float32, bfloat16, or float16")
-        return aliases[name]
-
-    def _target_device(self, param):
-        if self.device_spec in {"model", "param", "same"}:
-            return param.device
-        return torch.device(self.device_spec)
-
-    def _copy_param(self, param):
-        return param.detach().to(device=self._target_device(param), dtype=self.dtype).clone()
-
-    def _tracks_name(self, name):
-        include = set(self.include)
-        if "future_predictor" in include and name.startswith("future_predictor."):
-            return True
-        if "action_head" in include and name.startswith("action_head."):
-            return True
-        if "text_conditioner_proj" in include and name.startswith("text_conditioner.proj."):
-            return True
-        if "student_da3_blocks" in include:
-            # DA3 exposes `.blocks.X.*`. Match the block index so EMA follows
-            # the selected Stage 1 backbone blocks.
-            if name.startswith("student_da3."):
-                match = re.search(r"\.blocks\.(\d+)\.", name)
-                if match is not None:
-                    block_idx = int(match.group(1))
-                    return self.blocks_start <= block_idx <= self.blocks_end
-        return False
-
-    @torch.no_grad()
-    def update(self, model, step):
-        if self.num_tensors == 0:
-            return False
-        if step < self.start_step or step % self.update_every != 0:
-            return False
-        raw_model = _unwrap_train_model(model)
-        params = dict(raw_model.named_parameters())
-        decay = self.decay
-        one_minus = 1.0 - decay
-        for name in self.names:
-            param = params.get(name)
-            if param is None:
-                continue
-            src = param.detach().to(device=self.shadow[name].device, dtype=self.shadow[name].dtype)
-            self.shadow[name].mul_(decay).add_(src, alpha=one_minus)
-        return True
-
-    @torch.no_grad()
-    def load_from_checkpoint(self, ckpt, logger=None):
-        loaded = 0
-        skipped = []
-        flat_shadow = ckpt.get("ema", {}).get("shadow") if isinstance(ckpt.get("ema"), dict) else None
-        if isinstance(flat_shadow, dict):
-            for name, tensor in _strip_compile_prefix_state_dict(flat_shadow).items():
-                loaded += self._copy_into_shadow(name, tensor, skipped)
-
-        for prefix, ckpt_key in self._PREFIX_TO_CKPT_KEY.items():
-            state = ckpt.get(ckpt_key)
-            if state is None:
-                continue
-            for key, tensor in _strip_compile_prefix_state_dict(state).items():
-                loaded += self._copy_into_shadow(f"{prefix}.{key}", tensor, skipped)
-
-        if logger is not None:
-            if loaded:
-                logger.info("Restored Stage1 subset EMA tensors from checkpoint: %d", loaded)
-            else:
-                logger.info("No Stage1 subset EMA tensors found in checkpoint; initialized EMA from live weights.")
-            if skipped:
-                logger.warning("Skipped %d incompatible Stage1 EMA tensors during load.", len(skipped))
-        return loaded
-
-    def _copy_into_shadow(self, name, tensor, skipped):
-        name = str(name).replace("_orig_mod.", "")
-        if name not in self.shadow:
-            return 0
-        if tuple(tensor.shape) != tuple(self.shadow[name].shape):
-            skipped.append((name, tuple(tensor.shape), tuple(self.shadow[name].shape)))
-            return 0
-        self.shadow[name].copy_(tensor.detach().to(device=self.shadow[name].device, dtype=self.shadow[name].dtype))
-        return 1
-
-    def _module_state(self, prefix):
-        prefix_dot = f"{prefix}."
-        state = {}
-        for name in self.names:
-            if not name.startswith(prefix_dot):
-                continue
-            state[name[len(prefix_dot):]] = self.shadow[name].detach().cpu().clone()
-        return state
-
-    def checkpoint_state(self, step):
-        meta = {
-            "enabled": True,
-            "kind": "stage1_subset",
-            "decay": self.decay,
-            "device": self.device_spec,
-            "dtype": str(self.dtype).replace("torch.", ""),
-            "start_step": self.start_step,
-            "update_every": self.update_every,
-            "include": list(self.include),
-            "student_da3_blocks_start": self.blocks_start,
-            "student_da3_blocks_end": self.blocks_end,
-            "num_tensors": self.num_tensors,
-            "num_params": self.num_params,
-            "step": int(step),
-            "checkpoint_keys": list(self._PREFIX_TO_CKPT_KEY.values()),
-        }
-        state = {"ema": meta}
-        for prefix, ckpt_key in self._PREFIX_TO_CKPT_KEY.items():
-            module_state = self._module_state(prefix)
-            if module_state:
-                state[ckpt_key] = module_state
-        return state
-
-    @torch.no_grad()
-    def store_and_swap(self, model):
-        """Snapshot live params and swap EMA shadow in-place. Returns a backup
-        dict that must be passed to `restore(model, backup)` afterwards.
-        Used to evaluate closed-loop rollouts on the EMA copy without
-        disturbing optimizer state.
-        """
-        if self.num_tensors == 0:
-            return {}
-        raw_model = _unwrap_train_model(model)
-        params = dict(raw_model.named_parameters())
-        backup = {}
-        for name in self.names:
-            param = params.get(name)
-            if param is None:
-                continue
-            backup[name] = param.detach().clone()
-            shadow = self.shadow[name].to(device=param.device, dtype=param.dtype)
-            param.data.copy_(shadow)
-        return backup
-
-    @torch.no_grad()
-    def restore(self, model, backup):
-        if not backup:
-            return
-        raw_model = _unwrap_train_model(model)
-        params = dict(raw_model.named_parameters())
-        for name, tensor in backup.items():
-            param = params.get(name)
-            if param is None:
-                continue
-            param.data.copy_(tensor)
-
+from gam.training.ema import (
+    Stage1SubsetEMA,
+    finalize_stage1_subset_ema_config as _finalize_stage1_subset_ema_config,
+    stage1_subset_ema_config as _stage1_subset_ema_config,
+)
+from gam.training.eval_runtime import (
+    closed_loop_video_dir as _closed_loop_video_dir,
+    gather_eval_tensors as _gather_eval_tensors,
+    gather_variable_eval_tensor as _gather_variable_eval_tensor,
+    normalize_closed_loop_eval_profiles as _normalize_closed_loop_eval_profiles,
+    prepare_rollout_video_frames as _prepare_rollout_video_frames,
+    shutdown_train_loader_workers_for_closed_loop_eval as _shutdown_train_loader_workers_for_closed_loop_eval,
+)
+from gam.training.model import (
+    DA3FineTuneModel,
+    prepare_da3_finetune_batch,
+    resolve_backbone_action_input_dim as _resolve_backbone_action_input_dim,
+    resolve_da3_n_views as _resolve_da3_n_views,
+    sync_da3_view_count_to_cfg as _sync_da3_view_count_to_cfg,
+    unwrap_train_model as _unwrap_train_model,
+    zero_invalid_context_proprio as _zero_invalid_context_proprio,
+)
+from gam.training.optim import build_finetune_optimizer, build_finetune_scheduler
 
 
 def setup_logging(args, cfg, rank):
@@ -716,297 +233,6 @@ def setup_logging(args, cfg, rank):
         OmegaConf.save(cfg, os.path.join(experiment_dir, "config.yaml"))
 
     return experiment_dir, logger, wandb_run
-
-
-def _closed_loop_video_dir(
-    *,
-    profile_cfg: dict,
-    experiment_dir: str,
-    profile_name: str,
-    train_steps: int,
-    benchmark: str,
-) -> str:
-    explicit = profile_cfg.get("_video_dir") or profile_cfg.get("video_dir")
-    if explicit:
-        return str(explicit)
-
-    return os.path.join(
-        experiment_dir,
-        "rollout_videos",
-        profile_name,
-        f"step_{int(train_steps):07d}",
-    )
-
-
-def _shutdown_train_loader_workers_for_closed_loop_eval(
-    loader: DataLoader,
-    data_iter,
-    *,
-    logger: logging.Logger,
-    rank: int,
-    step: int,
-):
-    """Stop DataLoader workers before long simulator eval.
-
-    PyTorch installs a process-global SIGCHLD handler for DataLoader workers.
-    If persistent workers are left alive while MuJoCo/EGL rollout eval is
-    running, later worker termination can surface as an unrelated exception in
-    the rollout call stack. Shut them down through the iterator's own private
-    cleanup path so PyTorch unregisters worker pids, then recreate the iterator
-    on the next training step.
-    """
-    try:
-        n_workers = int(getattr(loader, "num_workers", 0) or 0)
-    except Exception:  # noqa: BLE001
-        n_workers = 0
-    if n_workers <= 0:
-        return data_iter
-
-    candidates = []
-    if data_iter is not None:
-        candidates.append(data_iter)
-    persistent_iter = getattr(loader, "_iterator", None)
-    if persistent_iter is not None and all(persistent_iter is not item for item in candidates):
-        candidates.append(persistent_iter)
-
-    shutdown_count = 0
-    for iterator in candidates:
-        shutdown = getattr(iterator, "_shutdown_workers", None)
-        if not callable(shutdown):
-            continue
-        if bool(getattr(iterator, "_shutdown", False)):
-            continue
-        try:
-            shutdown()
-            shutdown_count += 1
-        except Exception as exc:  # noqa: BLE001
-            if rank == 0:
-                logger.warning(
-                    "[step=%07d] DataLoader worker shutdown before closed-loop eval failed: %s",
-                    int(step),
-                    exc,
-                )
-    if hasattr(loader, "_iterator"):
-        try:
-            loader._iterator = None  # type: ignore[attr-defined]
-        except Exception:  # noqa: BLE001
-            pass
-    if rank == 0 and (shutdown_count > 0 or persistent_iter is not None):
-        logger.info(
-            "[step=%07d] shut down %d DataLoader iterator(s) before closed-loop eval; "
-            "workers will be recreated after eval",
-            int(step),
-            int(shutdown_count),
-        )
-    return None
-
-
-def build_finetune_optimizer(finetune_model, training_cfg):
-    base_lr = float(training_cfg.get("base_lr", 3e-5))
-    weight_decay = float(training_cfg.get("weight_decay", 0.01))
-    head_lr_mult = float(training_cfg.get("head_lr_mult", 10.0))
-    predictor_lr_mult = float(training_cfg.get("predictor_lr_mult", head_lr_mult))
-    adam_eps = float(training_cfg.get("adam_eps", 1e-8))
-    adam_beta1 = float(training_cfg.get("adam_beta1", 0.9))
-    adam_beta2 = float(training_cfg.get("adam_beta2", 0.999))
-    backbone_params, head_params, predictor_params = [], [], []
-    raw_model = finetune_model.module if hasattr(finetune_model, "module") else finetune_model
-    predictor_keywords = (
-        "future_predictor.",
-        "text_conditioner.proj.",
-    )
-    head_keywords = (
-        "action_head.",
-        "action_token",
-        "action_timestep_embed",
-        "action_input_proj",
-    )
-    for name, p in raw_model.named_parameters():
-        if not p.requires_grad:
-            continue
-        if any(kw in name for kw in predictor_keywords):
-            predictor_params.append(p)
-        elif any(kw in name for kw in head_keywords):
-            head_params.append(p)
-        else:
-            backbone_params.append(p)
-    param_groups = [{"params": backbone_params, "lr": base_lr}]
-    if head_params:
-        param_groups.append({"params": head_params, "lr": base_lr * head_lr_mult})
-    if predictor_params:
-        param_groups.append({"params": predictor_params, "lr": base_lr * predictor_lr_mult})
-    # `fused=True` collapses per-param launches into a single CUDA kernel :
-    # ~30-80 ms/step saved on the Grace-Hopper Python overhead path
-    # (pytorch.org "Fused Adam" perf note). Uses the standard AdamW path on
-    # devices without fused support.
-    opt = torch.optim.AdamW(
-        param_groups,
-        weight_decay=weight_decay,
-        eps=adam_eps,
-        betas=(adam_beta1, adam_beta2),
-        fused=True,
-    )
-    return opt, base_lr, head_lr_mult, predictor_lr_mult, adam_eps
-
-
-def build_finetune_scheduler(opt, training_cfg, max_steps, logger=None):
-    warmup_steps = int(training_cfg.get("warmup_steps", 500))
-    min_lr_ratio = float(training_cfg.get("min_lr_ratio", 0.01))
-
-    def lr_lambda(step):
-        if step < warmup_steps:
-            return max(step / max(warmup_steps, 1), 1e-6)
-        progress = (step - warmup_steps) / max(max_steps - warmup_steps, 1)
-        progress = min(progress, 1.0)
-        return min_lr_ratio + 0.5 * (1.0 - min_lr_ratio) * (1.0 + math.cos(math.pi * progress))
-
-    scheduler = torch.optim.lr_scheduler.LambdaLR(opt, lr_lambda=lr_lambda)
-    if logger is not None:
-        logger.info(
-            "Schedule: cosine decay, warmup=%d steps, max=%d steps, min_lr_ratio=%.3f",
-            warmup_steps,
-            max_steps,
-            min_lr_ratio,
-        )
-    return scheduler
-
-
-def _gather_eval_tensors(preds_list, gts_list, keys_list, world_size, rank, device):
-    """All-gather eval predictions/GTs/keys across ranks. Returns (cat_pred, cat_gt, keys, count) on rank 0;
-    empty/zero on other ranks. Pads shorter shards to the max length then trims after gather."""
-    local_pred = torch.cat(preds_list, dim=0) if preds_list else torch.empty(0, device=device)
-    local_gt = torch.cat(gts_list, dim=0) if gts_list else torch.empty(0, device=device)
-    if world_size <= 1:
-        return local_pred, local_gt, keys_list, local_pred.shape[0]
-    import torch.distributed as _dist
-    local_n = torch.tensor([local_pred.shape[0]], device=device)
-    n_list = [torch.zeros_like(local_n) for _ in range(world_size)]
-    _dist.all_gather(n_list, local_n)
-    max_n = int(max(x.item() for x in n_list))
-    if max_n == 0:
-        return local_pred, local_gt, [], 0
-    if local_pred.shape[0] < max_n:
-        pad = max_n - local_pred.shape[0]
-        # Use existing row or zeros if empty
-        if local_pred.shape[0] > 0:
-            local_pred = torch.cat([local_pred, local_pred[:1].expand(pad, *local_pred.shape[1:])], dim=0)
-            local_gt = torch.cat([local_gt, local_gt[:1].expand(pad, *local_gt.shape[1:])], dim=0)
-        else:
-            # This rank has nothing : other ranks must have data, construct placeholder
-            local_pred = torch.zeros((max_n, *local_pred.shape[1:]) if local_pred.dim() > 1 else (max_n,), device=device)
-            local_gt = torch.zeros_like(local_pred)
-    pred_shards = [torch.zeros_like(local_pred) for _ in range(world_size)]
-    gt_shards = [torch.zeros_like(local_gt) for _ in range(world_size)]
-    _dist.all_gather(pred_shards, local_pred)
-    _dist.all_gather(gt_shards, local_gt)
-    gathered_keys = [None for _ in range(world_size)]
-    _dist.all_gather_object(gathered_keys, keys_list)
-    if rank == 0:
-        preds = torch.cat([pred_shards[r][:int(n_list[r].item())] for r in range(world_size)], dim=0)
-        gts = torch.cat([gt_shards[r][:int(n_list[r].item())] for r in range(world_size)], dim=0)
-        keys = [k for rk in gathered_keys for k in (rk or [])]
-        count = sum(int(x.item()) for x in n_list)
-        return preds, gts, keys, count
-    return local_pred, local_gt, [], 0
-
-
-def _gather_variable_eval_tensor(tensors_list, world_size, rank, device, *, dtype=None):
-    """All-gather a variable-length tensor list along dim 0.
-
-    Used for eval masks, whose trailing shape can differ from action tensors.
-    Pads each rank to the max local length, gathers, then trims on rank 0.
-    """
-    local = torch.cat(tensors_list, dim=0) if tensors_list else None
-    local_n_value = 0 if local is None else int(local.shape[0])
-    local_n = torch.tensor([local_n_value], device=device, dtype=torch.long)
-    if dtype is None and local is not None:
-        dtype = local.dtype
-    if dtype is None:
-        dtype = torch.float32
-
-    if world_size <= 1:
-        if local is None:
-            return torch.empty((0,), device=device, dtype=dtype), 0
-        return local.to(device=device, dtype=dtype), local_n_value
-
-    import torch.distributed as _dist
-
-    trailing_shape = tuple(local.shape[1:]) if local is not None else None
-    shape_list = [None for _ in range(world_size)]
-    _dist.all_gather_object(shape_list, trailing_shape)
-    resolved_shape = next((shape for shape in shape_list if shape is not None), ())
-    if local is None:
-        local = torch.empty((0, *resolved_shape), device=device, dtype=dtype)
-    else:
-        local = local.to(device=device, dtype=dtype)
-
-    n_list = [torch.zeros_like(local_n) for _ in range(world_size)]
-    _dist.all_gather(n_list, local_n)
-    max_n = int(max(x.item() for x in n_list))
-    if max_n == 0:
-        return local, 0
-    if local.shape[0] < max_n:
-        pad = max_n - local.shape[0]
-        if local.shape[0] > 0:
-            pad_rows = local[:1].expand(pad, *local.shape[1:])
-        else:
-            pad_rows = torch.zeros((pad, *resolved_shape), device=device, dtype=local.dtype)
-        local = torch.cat([local, pad_rows], dim=0)
-    shards = [torch.zeros_like(local) for _ in range(world_size)]
-    _dist.all_gather(shards, local)
-    if rank == 0:
-        gathered = torch.cat([shards[r][: int(n_list[r].item())] for r in range(world_size)], dim=0)
-        return gathered, sum(int(x.item()) for x in n_list)
-    return local, 0
-
-
-def _normalize_da3_image_batch(encoder, images: torch.Tensor) -> torch.Tensor:
-    # Normalize in float32 regardless of encoder dtype.
-    mean = encoder.encoder_mean.float()
-    std = encoder.encoder_std.float()
-    return (images.float() - mean) / std
-
-
-def prepare_da3_finetune_batch(encoder, batch, device):
-    all_view_images = batch["all_view_images"].to(device)
-    batch_size, timesteps, n_views, _, height, width = all_view_images.shape
-    all_views = all_view_images.reshape(batch_size, timesteps * n_views, 3, height, width)
-    all_views_norm = _normalize_da3_image_batch(encoder, all_views)
-    target_view_images = batch.get("all_view_target_images")
-    teacher_views_norm = None
-    teacher_depth_valid_mask = None
-    view_valid_mask = None
-    if target_view_images is not None:
-        target_view_images = target_view_images.to(device)
-        teacher_views = target_view_images.reshape(batch_size, timesteps * n_views, 3, height, width)
-        teacher_views_norm = _normalize_da3_image_batch(encoder, teacher_views)
-    if "all_view_target_mask" in batch:
-        teacher_depth_valid_mask = batch["all_view_target_mask"].to(device=device, dtype=torch.bool)
-    if "view_valid_mask" in batch:
-        view_valid_mask = batch["view_valid_mask"].to(device=device, dtype=torch.bool)
-    return (
-        all_views_norm,
-        batch["actions"].to(device),
-        batch["proprioception"].to(device),
-        timesteps,
-        n_views,
-        teacher_views_norm,
-        teacher_depth_valid_mask,
-        view_valid_mask,
-    )
-
-
-def _zero_invalid_context_proprio(
-    proprio: torch.Tensor,
-    context_valid_mask: Optional[torch.Tensor],
-) -> torch.Tensor:
-    """Keep boundary-padding proprio from becoming normalized outliers."""
-    if context_valid_mask is None or proprio.ndim < 3:
-        return proprio
-    mask = context_valid_mask.to(device=proprio.device, dtype=torch.bool)
-    while mask.ndim < proprio.ndim:
-        mask = mask.unsqueeze(-1)
-    return torch.where(mask, proprio, torch.zeros_like(proprio))
 
 
 def run_da3_finetune_training(args, cfg):
@@ -2415,7 +1641,7 @@ def run_da3_finetune_training(args, cfg):
                 "use gam."
             )
 
-        from robot.unified_loss import compute_gam_forward_loss
+        from robot.losses.unified_loss import compute_gam_forward_loss
 
         eval_h_cfg = training_cfg.get("eval_H", predictor_cfg.get("eval_H", None))
         if eval_h_cfg is None or str(eval_h_cfg).lower() in {"", "max", "full"}:
@@ -2973,7 +2199,7 @@ def run_da3_finetune_training(args, cfg):
 
             if predictor_enabled:
                 # -------- Unified future-predictor path --------
-                from robot.unified_loss import (
+                from robot.losses.unified_loss import (
                     compute_gam_forward_loss,
                     sample_H,
                 )
@@ -3121,7 +2347,7 @@ def run_da3_finetune_training(args, cfg):
                             W_ = student_depth.shape[-1]
                             pred_depth = student_depth.reshape(B_, T_, V_, H_, W_)
                             if gt_depth_da3_batch is not None and gt_depth_mask_batch is not None:
-                                from robot.unified_loss import da3_style_depth_loss
+                                from robot.losses.unified_loss import da3_style_depth_loss
                                 target_depth = gt_depth_da3_batch.to(device=device, dtype=torch.float32)
                                 target_mask = gt_depth_mask_batch.to(device=device).bool()
                                 # Per-sample flag: does this sample have any valid GT pixel?

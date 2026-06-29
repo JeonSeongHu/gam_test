@@ -56,7 +56,7 @@ def _load_heavy_modules() -> None:
     from omegaconf import OmegaConf as _OmegaConf
 
     import eval_libero_unified as _elu
-    from robot.rollout_env import (
+    from robot.evaluation.rollout_env import (
         create_rollout_env_libero as _create_rollout_env_libero,
         create_rollout_env_libero_isolated as _create_rollout_env_libero_isolated,
         list_libero_task_metadata as _list_libero_task_metadata,
@@ -870,7 +870,7 @@ def main() -> None:
     device = elu._resolve_eval_cuda_device()
     render_gpu_device_id = elu._resolve_render_gpu_device_id(args.render_gpu_device_id)
     try:
-        from robot.closed_loop_libero_eval import _install_mujoco_glcontext_patch
+        from robot.evaluation.closed_loop_libero_eval import _install_mujoco_glcontext_patch
 
         _install_mujoco_glcontext_patch(render_gpu_device_id)
     except Exception as exc:  # noqa: BLE001

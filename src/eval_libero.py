@@ -22,9 +22,9 @@ _SRC_DIR = os.path.dirname(os.path.abspath(__file__))
 if _SRC_DIR not in sys.path:
     sys.path.insert(0, _SRC_DIR)
 
-from robot.da3_giant_encoder import DA3GiantEncoder
-from robot.dataset import ActionNormalizer
-from robot.rollout_env import create_rollout_env_libero, list_libero_tasks
+from robot.modeling.da3_giant_encoder import DA3GiantEncoder
+from robot.data.dataset import ActionNormalizer
+from robot.evaluation.rollout_env import create_rollout_env_libero, list_libero_tasks
 from train_robot import DA3FineTuneModel
 
 

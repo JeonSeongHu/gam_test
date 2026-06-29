@@ -39,8 +39,9 @@ and **6.9 ms** model-forward latency with the CUDA graph inference path.
 
 | Area | Paths |
 |------|-------|
-| Core model and training | `src/robot/`, `src/gam/training/`, `src/train_robot.py` |
-| Rollout evaluation | `src/eval_libero_unified.py`, `src/gam/evaluation/`, `scripts/run_hf_gam_libero_plus_eval.sh` |
+| Model components | `src/robot/modeling/`, `src/robot/losses/` |
+| Data and rollout runtime | `src/robot/data/`, `src/robot/evaluation/`, `src/robot/viz/` |
+| Training and evaluation entrypoints | `src/train_robot.py`, `src/eval_libero_unified.py`, `src/gam/training/`, `src/gam/evaluation/` |
 | Configs and runtime | `configs/training/libero_unified/`, `Dockerfile`, `environment.yml`, `requirements.txt` |
 | Setup utilities | `scripts/setup_sources.sh`, `scripts/setup_libero_plus.sh` |
 

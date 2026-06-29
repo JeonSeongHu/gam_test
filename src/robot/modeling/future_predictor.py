@@ -34,7 +34,7 @@ different everywhere (no modulation MLPs, no abs-position tables, different
 attention submodule surface). Running gam experiments will not
 resume across this commit.
 
-Contract with the unified training path (`src/robot/unified_loss.py`,
+Contract with the unified training path (`src/robot/losses/unified_loss.py`,
 `src/train_robot.py`):
   - forward signature unchanged at the kwargs level.
   - output dict keys unchanged: `predicted_next_visual_tokens`,

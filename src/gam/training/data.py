@@ -1,7 +1,7 @@
 """Dataset / DataLoader / collate helpers for Stage 1 training.
 
 Extracted from ``train_robot.py``. Self-contained: depends only on
-stdlib/torch + ``robot.dataset.build_robot_dataset``.
+stdlib/torch + ``robot.data.dataset.build_robot_dataset``.
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from typing import Optional
 import torch
 from torch.utils.data import DataLoader, Dataset, DistributedSampler
 
-from robot.dataset import build_robot_dataset
+from robot.data.dataset import build_robot_dataset
 
 
 def _expand_bool_mask_to(mask, target, *, fill_value: bool):

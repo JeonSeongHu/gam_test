@@ -38,7 +38,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 import torch
 
-from robot.future_predictor import (
+from robot.modeling.future_predictor import (
     GAMFuturePredictor,
     build_future_predictor,
     _HAS_FLEX,

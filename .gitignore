@@ -33,6 +33,8 @@ PLAN_world_model_robot_action.md
 
 # data / weights symlinked in for local runs (never commit)
 data/
+!src/robot/data/
+!src/robot/data/*.py
 gt_depth/
 *.pt
 Depth-Anything-3/

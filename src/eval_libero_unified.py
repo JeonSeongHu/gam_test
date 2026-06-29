@@ -27,10 +27,10 @@ if _SRC_DIR not in sys.path:
     sys.path.insert(0, _SRC_DIR)
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
-from robot.action_head_v2 import ActionHeadV2
-from robot.backbone_factory import create_stage1_backbone, stage1_backbone_type
-from robot.conditioning import ProprioConditioner, TextConditioner
-from robot.dataset import (
+from robot.modeling.action_head_v2 import ActionHeadV2
+from robot.modeling.backbone_factory import create_stage1_backbone, stage1_backbone_type
+from robot.modeling.conditioning import ProprioConditioner, TextConditioner
+from robot.data.dataset import (
     ActionNormalizer,
     StateNormalizer,
     _eef_relative_to_world_delta_action,
@@ -42,13 +42,13 @@ from robot.dataset import (
     _quat_xyzw_to_rpy,
 )
 from gam.evaluation.registry import append_eval_record, local_now_minute
-from robot.future_predictor import build_future_predictor
-from robot.rollout_env import (
+from robot.modeling.future_predictor import build_future_predictor
+from robot.evaluation.rollout_env import (
     create_rollout_env_libero,
     create_rollout_env_libero_isolated,
     list_libero_task_metadata,
 )
-from robot.unified_loss import (
+from robot.losses.unified_loss import (
     _slots_to_da3_propagation_inputs,
     extract_level0_slots,
 )
@@ -359,7 +359,7 @@ def eef_delta_to_world_delta_action_for_rollout(
 ) -> torch.Tensor:
     """Lazy bridge to dataset's legacy moving-frame EEF-delta converter.
 
-    In-training eval can import this file after `robot.dataset` was already
+    In-training eval can import this file after `robot.data.dataset` was already
     loaded at job start. Keeping the helper lookup lazy lets base-frame
     rollouts continue in those long-lived processes while still failing clearly.
     """
@@ -368,7 +368,7 @@ def eef_delta_to_world_delta_action_for_rollout(
     helper = getattr(_dataset, "_eef_relative_to_world_delta_action", None)
     if helper is None:
         raise RuntimeError(
-            "action_frame='eef_delta' requires robot.dataset._eef_relative_to_world_delta_action. "
+            "action_frame='eef_delta' requires robot.data.dataset._eef_relative_to_world_delta_action. "
             "Restart the job with the committed action-frame code before running EEF-delta rollout."
         )
     return helper(action, current_proprio, proprio_orientation=proprio_orientation)
@@ -388,7 +388,7 @@ def eef_relative_trajectory_to_world_delta_action_for_rollout(
     if helper is None:
         raise RuntimeError(
             "action_frame='eef_relative' requires "
-            "robot.dataset._eef_relative_trajectory_to_world_delta_action. "
+            "robot.data.dataset._eef_relative_trajectory_to_world_delta_action. "
             "Restart the job with the committed action-frame code before rollout."
         )
     return helper(
@@ -6209,7 +6209,7 @@ def main() -> None:
     # unavailable. On CSCS nodes the native path must stay active so
     # `render_gpu_device_id` and `MUJOCO_EGL_DEVICE_ID` select the rank-local GPU.
     try:
-        from robot.closed_loop_libero_eval import _install_mujoco_glcontext_patch
+        from robot.evaluation.closed_loop_libero_eval import _install_mujoco_glcontext_patch
         _install_mujoco_glcontext_patch(resolved_render_gpu_device_id)
     except Exception as exc:  # noqa: BLE001
         print(f"[eval_libero_unified] WARN: GLContext patch skipped: {exc}")
