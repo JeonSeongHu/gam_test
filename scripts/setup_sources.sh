@@ -56,6 +56,9 @@ cat <<EOF
   export DA3_ROOT="$ROOT"
   export DA3_LIBERO_SOURCE_DIR="$ROOT/LIBERO"
   export DA3_LIBERO_PLUS_DIR="$ROOT/LIBERO-plus"
-  export PYTHONPATH="$ROOT/src:$ROOT/LIBERO:\${PYTHONPATH:-}"   # LIBERO repo root
+  export PYTHONPATH="$ROOT/src:$ROOT/LIBERO-plus:$ROOT/LIBERO:\${PYTHONPATH:-}"
   export MUJOCO_GL=egl PYOPENGL_PLATFORM=egl
+
+For LIBERO-Plus rollout eval, install perturbation assets once:
+  bash scripts/setup_libero_plus.sh --download-assets
 EOF

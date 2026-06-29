@@ -103,6 +103,7 @@ docker run --gpus all -it --rm \
 conda env create -f environment.yml
 conda activate da3-libero
 bash scripts/setup_sources.sh
+bash scripts/setup_libero_plus.sh --download-assets
 ```
 
 ### venv
@@ -114,6 +115,7 @@ pip install torch==2.5.1 torchvision==0.20.1 \
   --index-url https://download.pytorch.org/whl/cu124
 pip install -r requirements.txt
 bash scripts/setup_sources.sh
+bash scripts/setup_libero_plus.sh --download-assets
 ```
 
 For Debian or Ubuntu venv installs, install the system packages used by Docker:
@@ -131,7 +133,7 @@ export DA3_ROOT=/path/to/this_repo
 export DA3_BASE_CKPT=$DA3_ROOT/checkpoints/track4world_da3.pth
 export DA3_LIBERO_SOURCE_DIR=$DA3_ROOT/LIBERO
 export DA3_LIBERO_PLUS_DIR=$DA3_ROOT/LIBERO-plus
-export PYTHONPATH=$DA3_ROOT/src:$DA3_LIBERO_SOURCE_DIR:$PYTHONPATH
+export PYTHONPATH=$DA3_ROOT/src:$DA3_LIBERO_PLUS_DIR:$DA3_LIBERO_SOURCE_DIR:$PYTHONPATH
 export MUJOCO_GL=egl
 export PYOPENGL_PLATFORM=egl
 ```
@@ -139,6 +141,12 @@ export PYOPENGL_PLATFORM=egl
 The launchers assume the active Docker, conda, or venv already provides the
 runtime libraries. They leave `LD_LIBRARY_PATH`, ImageMagick paths, and external
 Python package fallbacks untouched.
+
+`scripts/setup_sources.sh` installs source checkouts. Run
+`scripts/setup_libero_plus.sh --download-assets` to download
+`Sylvest/LIBERO-plus` `assets.zip`, strip the nested archive prefix, and
+install assets under `$DA3_LIBERO_PLUS_DIR/libero/libero/assets`. Override the location with
+`DA3_LIBERO_PLUS_ASSETS_DIR` when assets live outside the checkout.
 
 ## Data And Weights
 
@@ -205,6 +213,12 @@ The released configs resolve the DA3 base checkpoint and LIBERO data under
 The standalone script runs one process per GPU, shards the task list, and writes
 suite-level `summary.json` and `per_task.csv` files.
 
+Install LIBERO-Plus assets before the first rollout:
+
+```bash
+bash scripts/setup_libero_plus.sh --download-assets
+```
+
 ```bash
 GAM_EVAL_GPUS=0,1,2,3 \
 scripts/run_hf_gam_libero_plus_eval.sh spatial
@@ -236,6 +250,22 @@ Default protocol:
 | `--env-process-isolation` | enabled |
 
 `original` robot qpos follows the official LIBERO-Plus robot initialization.
+
+Parallelism is controlled by environment variables:
+
+| Variable | Default | Meaning |
+|----------|---------|---------|
+| `GAM_EVAL_GPUS` | `CUDA_VISIBLE_DEVICES` or `0` | One eval process and one task shard per listed GPU |
+| `PARALLEL_ENVS_PER_GPU` | `16` | Simulator workers per GPU process |
+| `MAX_BATCH_SIZE` | `16` | Maximum observations per policy forward |
+| `MAX_WAIT_TIME` | `0.5` | Batch wait time in seconds |
+| `ENV_CACHE_SIZE` | `1` | Cached simulator instances per worker |
+| `GAM_PLUS_PERTURBATION` | `all` | LIBERO-Plus perturbation filter |
+| `GAM_PLUS_OFFICIAL_CATEGORY` | `all` | Official category filter |
+
+The launcher sets `MUJOCO_GL=egl`, `PYOPENGL_PLATFORM=egl`, and
+`EGL_PLATFORM=device`. On a bare GPU machine, install the GL, EGL, OSMesa, GLFW,
+ffmpeg, and ImageMagick packages listed in the installation section.
 
 Full LIBERO-Plus contains 10,030 one-trial episodes:
 
