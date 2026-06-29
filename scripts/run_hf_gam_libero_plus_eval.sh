@@ -14,7 +14,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 usage() {
   cat <<'EOF'
 Usage:
-  scripts/run_hf_gam_libero_plus_eval.sh spatial|object|goal|long|all
+  bash scripts/run_hf_gam_libero_plus_eval.sh spatial|object|goal|long|all
 
 Environment:
   GAM_EVAL_GPUS              Comma-separated physical GPU ids. Default: CUDA_VISIBLE_DEVICES or 0.
@@ -35,7 +35,7 @@ Environment:
   GAM_PLUS_OFFICIAL_CATEGORY Plus official category filter. Default: all
 
 Example:
-  GAM_EVAL_GPUS=0,1,2,3 scripts/run_hf_gam_libero_plus_eval.sh spatial
+  GAM_EVAL_GPUS=0,1,2,3 bash scripts/run_hf_gam_libero_plus_eval.sh spatial
 EOF
 }
 

@@ -154,8 +154,8 @@ bash scripts/setup_libero_plus.sh --download-assets
 Run standalone LIBERO-Plus evaluation from the released HF checkpoint:
 
 ```bash
-GAM_EVAL_GPUS=0,1,2,3 scripts/run_hf_gam_libero_plus_eval.sh spatial
-GAM_EVAL_GPUS=0,1,2,3 scripts/run_hf_gam_libero_plus_eval.sh all
+GAM_EVAL_GPUS=0,1,2,3 bash scripts/run_hf_gam_libero_plus_eval.sh spatial
+GAM_EVAL_GPUS=0,1,2,3 bash scripts/run_hf_gam_libero_plus_eval.sh all
 ```
 
 The standalone launcher uses `qpos=original` for LIBERO-Plus robot
