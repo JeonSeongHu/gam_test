@@ -189,6 +189,9 @@ closed-loop eval.
 
 ## Acknowledgements
 
+This repository is built on top of
+[GLD: Geometric Latent Diffusion](https://github.com/cvlab-kaist/GLD).
+
 We thank the teams behind
 [Track4World](https://github.com/TencentARC/Track4World),
 [OpenPI](https://github.com/Physical-Intelligence/openpi),
