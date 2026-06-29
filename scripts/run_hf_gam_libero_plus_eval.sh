@@ -20,6 +20,8 @@ Environment:
   GAM_EVAL_GPUS              Comma-separated physical GPU ids. Default: CUDA_VISIBLE_DEVICES or 0.
   HF_ROOT                    Downloaded HF checkpoint root.
                              Default: checkpoints_hf/3da-libero-gam
+  DA3_BASE_CKPT              DA3-Giant base checkpoint.
+                             Default: $DA3_ROOT/checkpoints/track4world_da3.pth
   OUT_ROOT                   Eval output root.
                              Default: results/eval_libero_batched/hf_gam_plus_local
   DA3_LIBERO_SOURCE_DIR      LIBERO checkout root. Default: ./LIBERO
@@ -54,6 +56,7 @@ esac
 export DA3_CODE_ROOT="${DA3_CODE_ROOT:-$REPO_ROOT}"
 export DA3_ROOT="${DA3_ROOT:-$REPO_ROOT}"
 export DA3_PYTHON="${DA3_PYTHON:-python}"
+export DA3_BASE_CKPT="${DA3_BASE_CKPT:-$DA3_ROOT/checkpoints/track4world_da3.pth}"
 export DA3_LIBERO_SOURCE_DIR="${DA3_LIBERO_SOURCE_DIR:-$REPO_ROOT/LIBERO}"
 export DA3_LIBERO_PLUS_DIR="${DA3_LIBERO_PLUS_DIR:-$REPO_ROOT/LIBERO-plus}"
 export HF_ROOT="${HF_ROOT:-$REPO_ROOT/checkpoints_hf/3da-libero-gam}"
@@ -84,23 +87,11 @@ if (( ${#GPUS[@]} < 1 )); then
   exit 2
 fi
 
-required_files=(
-  "$HF_ROOT/spatial/gam.pt"
-  "$HF_ROOT/spatial/config.yaml"
-  "$HF_ROOT/object/gam.pt"
-  "$HF_ROOT/object/config.yaml"
-  "$HF_ROOT/goal/gam.pt"
-  "$HF_ROOT/goal/config.yaml"
-  "$HF_ROOT/long/gam.pt"
-  "$HF_ROOT/long/config.yaml"
-)
-for path in "${required_files[@]}"; do
-  if [[ ! -s "$path" ]]; then
-    echo "ERROR: missing required HF file: $path" >&2
-    echo "Download with: hf download SeonghuJeon/3da-libero-gam --local-dir $HF_ROOT" >&2
-    exit 2
-  fi
-done
+if [[ ! -s "$DA3_BASE_CKPT" ]]; then
+  echo "ERROR: missing DA3 base checkpoint: $DA3_BASE_CKPT" >&2
+  echo "Download with: hf download SeonghuJeon/3da-libero-training-assets --repo-type dataset --local-dir $DA3_ROOT" >&2
+  exit 2
+fi
 if [[ ! -d "$DA3_LIBERO_PLUS_DIR/libero" ]]; then
   echo "ERROR: missing LIBERO-Plus checkout: $DA3_LIBERO_PLUS_DIR" >&2
   exit 2
@@ -268,6 +259,7 @@ prepare_gam_config() {
   local src_config="$1"
   local dst_config="$2"
   "$DA3_PYTHON" - "$src_config" "$dst_config" <<'PY'
+import os
 import sys
 from omegaconf import OmegaConf
 
@@ -276,6 +268,12 @@ cfg = OmegaConf.load(src)
 if not hasattr(cfg, "predictor") or cfg.predictor is None:
     cfg.predictor = {}
 cfg.predictor.type = "gam"
+if not hasattr(cfg, "stage_1") or cfg.stage_1 is None:
+    cfg.stage_1 = {}
+cfg.stage_1.ckpt_path = os.environ.get(
+    "DA3_BASE_CKPT",
+    "${oc.env:DA3_ROOT,.}/checkpoints/track4world_da3.pth",
+)
 OmegaConf.save(config=cfg, f=dst)
 PY
 }
@@ -297,6 +295,14 @@ run_suite() {
   local run_name="${suite_key}_hf_gam_${step_name}_plus_${filter_name}_qpos_original_$(date +%Y%m%d_%H%M%S)"
   local run_root="$OUT_ROOT/$suite_key/$run_name"
   local config="$run_root/config.gam.yaml"
+
+  for path in "$ckpt" "$source_config"; do
+    if [[ ! -s "$path" ]]; then
+      echo "ERROR: missing required HF file: $path" >&2
+      echo "Download with: hf download SeonghuJeon/3da-libero-gam --local-dir $HF_ROOT" >&2
+      exit 2
+    fi
+  done
 
   mkdir -p "$run_root/shards"
   prepare_gam_config "$source_config" "$config"
