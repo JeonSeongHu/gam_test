@@ -543,6 +543,16 @@ General per-submodule compile is also available:
 - `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` is recommended for
   multi-GPU fine-tuning.
 
+## Acknowledgements
+
+We thank the teams behind
+[Track4World](https://github.com/TencentARC/Track4World),
+[OpenPI](https://github.com/Physical-Intelligence/openpi),
+[Pi0.5](https://huggingface.co/docs/lerobot/en/pi05),
+[Cosmos Policy](https://github.com/nvlabs/cosmos-policy), and
+[OpenVLA-OFT](https://github.com/moojink/openvla-oft) for releasing their
+research, code, and models to the robotics community.
+
 ## Citation
 
 ```bibtex
