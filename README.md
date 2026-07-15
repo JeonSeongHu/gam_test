@@ -129,6 +129,9 @@ hf download SeonghuJeon/3da-libero-gam \
   --local-dir checkpoints_hf/3da-libero-gam
 ```
 
+See [docs/pretraining-data.md](docs/pretraining-data.md) for the pretraining
+dataset sources and the depth, index, and normalization utilities.
+
 To download only the pretrained initialization checkpoint:
 
 ```bash
@@ -205,6 +208,10 @@ deepspeed --include localhost:0,1,2,3 src/train_robot.py \
 See [docs/training.md](docs/training.md) for config keys, CLI flags, W&B resume,
 optimizer-state resume, DeepSpeed ZeRO-2, compile settings, and in-training
 closed-loop eval.
+
+## To Do
+
+- [ ] Pretraining dataset code release
 
 ## Acknowledgements
 
