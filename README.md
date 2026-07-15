@@ -129,6 +129,9 @@ hf download SeonghuJeon/3da-libero-gam \
   --local-dir checkpoints_hf/3da-libero-gam
 ```
 
+See [docs/pretraining-data.md](docs/pretraining-data.md) for the pretraining
+dataset sources and the depth, index, and normalization utilities.
+
 To download only the pretrained initialization checkpoint:
 
 ```bash
