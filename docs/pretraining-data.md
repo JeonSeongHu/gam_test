@@ -1,11 +1,47 @@
 # Pretraining Data
 
-GAM pretraining combines public Open X-Embodiment, MimicGen, and RoboCasa365
-data. The full multi-dataset training loader is not part of this release, but
-the dataset list and scripts for depth, index, and normalization statistics are
-provided here.
+## Mixture
 
-## Setup
+| Source | Ratio | Depth |
+|---|---:|---|
+| Open X-Embodiment | 72% | DA3 teacher pseudo-depth |
+| MimicGen | 18% | Simulator depth |
+| RoboCasa365 | 10% | Simulator depth |
+
+Base: 224x224 images, external + wrist views, 8-step action chunks. Views are
+configurable.
+
+## Datasets
+
+| Source | Dataset key | Download |
+|---|---|---|
+| Open X-Embodiment | `bridge` | [BrunoM42/bridge_orig_lerobot](https://huggingface.co/datasets/BrunoM42/bridge_orig_lerobot) |
+| Open X-Embodiment | `droid` | [lerobot/droid_1.0.1](https://huggingface.co/datasets/lerobot/droid_1.0.1) |
+| Open X-Embodiment | `taco_play` | [lerobot/taco_play](https://huggingface.co/datasets/lerobot/taco_play) |
+| Open X-Embodiment | `utaustin_mutex` | [lerobot/utaustin_mutex](https://huggingface.co/datasets/lerobot/utaustin_mutex) |
+| Open X-Embodiment | `stanford_hydra_dataset` | [lerobot/stanford_hydra_dataset](https://huggingface.co/datasets/lerobot/stanford_hydra_dataset) |
+| Open X-Embodiment | `berkeley_autolab_ur5` | [lerobot/berkeley_autolab_ur5](https://huggingface.co/datasets/lerobot/berkeley_autolab_ur5) |
+| Open X-Embodiment | `austin_sailor_dataset` | [lerobot/austin_sailor_dataset](https://huggingface.co/datasets/lerobot/austin_sailor_dataset) |
+| Open X-Embodiment | `austin_sirius_dataset` | [lerobot/austin_sirius_dataset](https://huggingface.co/datasets/lerobot/austin_sirius_dataset) |
+| Open X-Embodiment | `berkeley_fanuc_manipulation` | [lerobot/berkeley_fanuc_manipulation](https://huggingface.co/datasets/lerobot/berkeley_fanuc_manipulation) |
+| Open X-Embodiment | `jaco_play` | [lerobot/jaco_play](https://huggingface.co/datasets/lerobot/jaco_play) |
+| Open X-Embodiment | `fmb_dataset` | [lerobot/fmb](https://huggingface.co/datasets/lerobot/fmb) |
+| Open X-Embodiment | `kuka` | [lerobot/stanford_kuka_multimodal_dataset](https://huggingface.co/datasets/lerobot/stanford_kuka_multimodal_dataset) |
+| Open X-Embodiment | `fractal20220817_data` | [BrunoM42/fractal20220817_data_lerobot](https://huggingface.co/datasets/BrunoM42/fractal20220817_data_lerobot) |
+| Open X-Embodiment | `berkeley_cable_routing` | [lerobot/berkeley_cable_routing](https://huggingface.co/datasets/lerobot/berkeley_cable_routing) |
+| Open X-Embodiment | `roboturk` | [lerobot/roboturk](https://huggingface.co/datasets/lerobot/roboturk) |
+| Open X-Embodiment | `dlr_edan_shared_control` | [lerobot/dlr_edan_shared_control](https://huggingface.co/datasets/lerobot/dlr_edan_shared_control) |
+| Open X-Embodiment | `austin_buds_dataset` | [lerobot/austin_buds_dataset](https://huggingface.co/datasets/lerobot/austin_buds_dataset) |
+| Open X-Embodiment | `nyu_franka_play_dataset` | [lerobot/nyu_franka_play_dataset](https://huggingface.co/datasets/lerobot/nyu_franka_play_dataset) |
+| Open X-Embodiment | `nyu_door_opening_surprising_effectiveness` | [lerobot/nyu_door_opening_surprising_effectiveness](https://huggingface.co/datasets/lerobot/nyu_door_opening_surprising_effectiveness) |
+| Open X-Embodiment | `cmu_stretch` | [lerobot/cmu_stretch](https://huggingface.co/datasets/lerobot/cmu_stretch) |
+| Open X-Embodiment | `furniture_bench_dataset` | [tailong-wu/furniture_bench_dataset_lerobot_v30](https://huggingface.co/datasets/tailong-wu/furniture_bench_dataset_lerobot_v30) |
+| Open X-Embodiment | `bc_z` | [tailong-wu/bc_z_lerobot_v30](https://huggingface.co/datasets/tailong-wu/bc_z_lerobot_v30) |
+| Open X-Embodiment | `language_table` | [tailong-wu/language_table_lerobot_v30](https://huggingface.co/datasets/tailong-wu/language_table_lerobot_v30) |
+| MimicGen | `core` | [amandlek/mimicgen_datasets](https://huggingface.co/datasets/amandlek/mimicgen_datasets) |
+| RoboCasa365 | `pretrain / human / atomic + composite` | [robocasa/robocasa](https://github.com/robocasa/robocasa) |
+
+## Paths
 
 ```bash
 export GAM_ROOT="$(git rev-parse --show-toplevel)"
@@ -13,32 +49,14 @@ export DATA_ROOT="${DATA_ROOT:-$HOME/gam-data}"
 mkdir -p "$DATA_ROOT"
 ```
 
-Check each upstream repository's current size before downloading. The complete
-mixture requires several terabytes after extraction and preprocessing.
-
-## Sources
-
-| Source | Paper ratio | Data | Depth |
-|---|---:|---|---|
-| Open X-Embodiment | 72% | 23 LeRobot datasets | DA3 teacher pseudo-depth |
-| MimicGen | 18% | Official `core` demonstrations | Simulator depth |
-| RoboCasa365 | 10% | Human pretraining subset | Simulator depth |
-
-The base setting uses 224x224 images, two views, and an 8-step action chunk.
-External and wrist cameras are the defaults; camera lists remain configurable.
-
 ## Download
 
-### Open X
-
-The downloader contains the 23 Hugging Face repository IDs used by GAM:
+### Open X-Embodiment
 
 ```bash
 python "$GAM_ROOT/scripts/pretraining/download_openx.py" \
   --output-root "$DATA_ROOT/openx_lerobot"
 ```
-
-Use `--dry-run` to print the repository list without downloading.
 
 ### MimicGen
 
@@ -51,19 +69,14 @@ hf download amandlek/mimicgen_datasets \
 
 ### RoboCasa365
 
-Install RoboCasa, then use its official downloader:
-
 ```bash
 python -m robocasa.scripts.download_datasets \
   --split pretrain --source human
 ```
 
-Use the downloader's resulting `v1.0` directory as `--robocasa-root` below.
+Use the downloaded `v1.0` directory as `--robocasa-root`.
 
 ## Depth
-
-Run the exporters in environments containing the matching upstream simulator
-packages. Both scripts accept a comma-separated `--cameras` list.
 
 ### MimicGen
 
@@ -76,9 +89,7 @@ python "$GAM_ROOT/scripts/pretraining/export_mimicgen_depth.py" \
   --cameras agentview,robot0_eye_in_hand
 ```
 
-The exporter restores each HDF5 simulator state, renders the selected cameras,
-and converts the MuJoCo depth buffer to metric depth with
-`get_real_depth_map`.
+Output: metric depth from HDF5 state replay and MuJoCo `get_real_depth_map`.
 
 ### RoboCasa365
 
@@ -92,13 +103,10 @@ python "$GAM_ROOT/scripts/pretraining/export_robocasa_depth.py" \
   --cameras robot0_agentview_left,robot0_eye_in_hand
 ```
 
-This selects successful episodes without mobile-base motion, removes no-op
-frames, replays the saved state and XML, and writes metric depth plus
-`index.json`.
+Output: metric depth and `index.json` from successful base-static episodes after
+no-op filtering.
 
 ## Actions
-
-All sources are converted to:
 
 ```text
 [delta_position(3), delta_rotation_axis_angle(3), gripper_close(1)]
@@ -106,11 +114,9 @@ All sources are converted to:
 
 | Source | Conversion |
 |---|---|
-| MimicGen | OSC scale: position `0.05`, rotation `0.5`; signed gripper to close polarity |
-| RoboCasa365 | Drop base/control slots; keep 6D arm delta; signed gripper to close polarity |
-| Open X | Apply source-specific frame, rotation, gripper, and valid-dimension conversion |
-
-Statistics are computed separately after conversion. For MimicGen raw HDF5:
+| Open X-Embodiment | Source-specific frame, rotation, gripper, and valid-dimension conversion |
+| MimicGen | OSC position x `0.05`; rotation x `0.5`; `-1=open, +1=close` to `0=open, 1=close` |
+| RoboCasa365 | Drop base/control slots; keep 6D arm delta; `-1=open, +1=close` to `0=open, 1=close` |
 
 ```bash
 python "$GAM_ROOT/scripts/pretraining/compute_action_stats.py" \
@@ -120,25 +126,11 @@ python "$GAM_ROOT/scripts/pretraining/compute_action_stats.py" \
   --output "$DATA_ROOT/stats/mimicgen.json"
 ```
 
-For canonical 7D NumPy, HDF5, or Parquet actions, use the default
-`--layout canonical7`. RoboCasa365 raw 12D arrays can use
-`--layout robocasa365-12d`.
-
-The normalization is:
+Use `--layout canonical7` for converted actions and
+`--layout robocasa365-12d` for raw RoboCasa365 actions.
 
 ```text
 a_norm = 2 * (a - q01) / (q99 - q01 + eps) - 1
 ```
 
-## License
-
-Follow the licenses and citation requirements of every upstream dataset,
-MimicGen, RoboCasa365, robosuite, and MuJoCo. Generated depth does not replace
-the upstream terms.
-
-## Links
-
-- [GAM paper](https://arxiv.org/abs/2606.17046)
-- [Open X-Embodiment](https://robotics-transformer-x.github.io/)
-- [MimicGen](https://huggingface.co/datasets/amandlek/mimicgen_datasets)
-- [RoboCasa](https://github.com/robocasa/robocasa)
+Upstream licenses and citation requirements apply.

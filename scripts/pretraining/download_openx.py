@@ -54,7 +54,9 @@ def main() -> int:
     repositories = tuple(args.repositories or OPENX_REPOSITORIES)
     unknown = sorted(set(repositories) - set(OPENX_REPOSITORIES))
     if unknown:
-        raise ValueError(f"Unknown GAM Open X repositories: {', '.join(unknown)}")
+        raise ValueError(
+            f"Unknown GAM Open X-Embodiment repositories: {', '.join(unknown)}"
+        )
 
     output_root = args.output_root.expanduser().resolve()
     for repo_id in repositories:
